@@ -176,7 +176,7 @@ class MetaplexAPI():
             private_key = self.cipher.decrypt(encrypted_private_key).decode('ascii')
             signers = [Account(self.private_key), Account(private_key)]
             # TODO: Verify this params
-            spl_transfer_params = Transfer2Params(
+            spl_transfer_params = TransferParams(
                 program_id=PublicKey(self.token_program_id),
                 source=PublicKey(sender),
                 dest=PublicKey(to),
@@ -231,7 +231,7 @@ class MetaplexAPI():
             private_key = self.cipher.decrypt(encrypted_private_key).decode('ascii')
             signers = [Account(self.private_key) ,Account(private_key)]
             # TODO: Verify this params
-            burn_params = Burn2Params(
+            burn_params = BurnParams(
                 program_id=PublicKey(self.token_program_id),
                 account=PublicKey(sender),
                 mint=PublicKey(contract_address),
