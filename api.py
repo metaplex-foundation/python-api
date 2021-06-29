@@ -9,7 +9,7 @@ from solana.account import Account
 from solana.rpc.api import Client
 from solana.system_program import transfer, TransferParams 
 from spl.token.instructions import (
-    mint_to, MintToParams, transfer as spl_transfer, burn, BurnParams
+    mint_to, MintToParams, transfer as spl_transfer, TransferParams, burn, BurnParams
 )
 import base58
 class MetaplexAPI():
@@ -173,17 +173,73 @@ class MetaplexAPI():
         msg = ""
         try:
             client = Client(network)
-            private_key = self.cipher.decrypt(encrypted_private_key).decode('utf-8')
+            private_key = self.cipher.decrypt(encrypted_private_key).decode('ascii')
             signers = [Account(self.private_key), Account(private_key)]
-            spl_transfer_params = TransferParams(
-                program_id=PublicKey(self.token_account),
+            # TODO: Verify this params
+            spl_transfer_params = Transfer2Params(
+                program_id=PublicKey(self.token_program_id),
                 source=PublicKey(sender),
                 dest=PublicKey(to),
-                owner=PublicKey(contract_address),
+                owner=PublicKey(self.public_key),
                 signers=signers,
                 amount=1,
             )
             ix = spl_transfer(spl_transfer_params)
+            tx = Transaction().add(ix)
+            # Send request
+            try:
+                response = client.send_transaction(tx, *signers)
+            except Exception as e:
+                msg = f"ERROR: Encountered exception while attempting to send transaction: {e}"
+                raise(e)
+            # Pull byte array from initial transaction
+            tx_payload = list(tx.serialize())
+            if "error" not in response:
+                return json.dumps(
+                    {
+                        'status': HTTPStatus.OK,
+                        'msg': f"Successfully burned token",
+                        'tx': tx_payload,
+                        'response': response.get('result'),
+                    }
+                )
+            else:
+                return json.dumps(
+                    {
+                        'status': HTTPStatus.BAD_REQUEST,
+                        'response': response,
+                        'payload': tx_payload,
+                    }
+                )
+        except Exception as e:
+            return json.dumps(
+                {
+                    'status': HTTPStatus.BAD_REQUEST,
+                    'msg': msg,
+                }
+            )
+
+    def burn(self, network, contract, sender, token, encrypted_private_key, contract_address):
+        """
+        Burn a token, permanently removing it from the blockchain.
+        May require a private key, if so this will be provided encrypted using Fernet: https://cryptography.io/en/latest/fernet/
+        Return a status flag of success or fail and the native transaction data.
+        """
+        msg = ""
+        try:
+            client = Client(network)
+            private_key = self.cipher.decrypt(encrypted_private_key).decode('ascii')
+            signers = [Account(self.private_key) ,Account(private_key)]
+            # TODO: Verify this params
+            burn_params = Burn2Params(
+                program_id=PublicKey(self.token_program_id),
+                account=PublicKey(sender),
+                mint=PublicKey(contract_address),
+                owner=PublicKey(self.public_key),
+                amount=1,
+                signers=signers,
+            )
+            ix = burn(burn_params)
             tx = Transaction().add(ix)
             # Send request
             try:
@@ -215,43 +271,5 @@ class MetaplexAPI():
                 {
                     'status': HTTPStatus.BAD_REQUEST,
                     'msg': msg,
-                }
-            )
-
-    def burn(self, network, contract, sender, token, private_key, contract_address):
-        """
-        Burn a token, permanently removing it from the blockchain.
-        May require a private key, if so this will be provided encrypted using Fernet: https://cryptography.io/en/latest/fernet/
-        Return a status flag of success or fail and the native transaction data.
-        """
-        tx = None
-        try:
-            client = Client(network)
-            signers = [Account(self.SOURCE_ACCOUNT_KEY), Account(private_key)]
-            burn_params = BurnParams(
-                program_id=PublicKey(self.TOKEN_PROGRAM_ID),
-                account=PublicKey(sender),
-                mint=PublicKey(self.MINT_ACCOUNT_KEY),
-                owner=PublicKey(self.SOURCE_ACCOUNT_PUBKEY),
-                amount=1,
-                signers=signers,
-            )
-            ix = burn(burn_params)
-            tx = client.set_transaction(ix, *signers) 
-            response = client.send_transaction(tx).json()
-            if "error" not in response:
-                return json.dumps(
-                    {
-                        'status': HTTPStatus.OK,
-                        'tx': tx,
-                    }
-                )
-        except:
-            pass
-        finally:
-            return json.dumps(
-                {
-                    'status': HTTPStatus.BAD_REQUEST,
-                    'tx': tx
                 }
             )
