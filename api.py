@@ -1,5 +1,8 @@
-from enum import Enum
+import configparser
 import json
+from http import HTTPStatus
+from cryptography.fernet import Fernet
+
 from solana.publickey import PublicKey 
 from solana.transaction import Transaction
 from solana.account import Account 
@@ -9,24 +12,14 @@ from spl.token.instructions import (
     mint_to, MintToParams, transfer as spl_transfer, burn, BurnParams
 )
 import base58
-from nacl.public import PrivateKey
-from nacl import signing
-import cherrypy
-
-Status = Enum("Success", "Failure")
-
 class MetaplexAPI():
 
     def __init__(self, cfg):
-        self.private_key = cfg["PRIVATE_KEY"]
-        self.public_key = cfg["PUBLIC_KEY"]
-        self.token_account = cfg["TOKEN_ACCOUNT_KEY"]
+        self.private_key = list(base58.b58decode(cfg["KEYS"]["PRIVATE_KEY"]))[:32]
+        self.public_key = cfg["KEYS"]["PUBLIC_KEY"]
+        self.token_program_id = cfg["KEYS"]["TOKEN_PROGRAM_ID"]
+        self.cipher = Fernet(cfg["KEYS"]["DECRYTPTION_KEY"])
 
-    @cherrypy.expose
-    def index(self):
-        return "Hello World!"
-
-    @cherrypy.expose
     def deploy(self, network, contract, name, symbol):
         """
         Deploy a contract to the blockchain (on networks that support contracts). Takes the network ID and contract name, plus initialisers of name and symbol. Process may vary significantly between blockchains.
@@ -44,48 +37,76 @@ class MetaplexAPI():
             }
         )
 
-    @cherrypy.expose
-    def wallet(self, network):
+    def wallet(self):
         """ Generate a wallet on the specified network and return the address and private key. """
-        private_key = PrivateKey.generate()
-        address = base58.b58encode(signing.SigningKey(private_key.encode()).verify_key.encode())
+        account = Account()
+        pub_key = account.public_key() 
+        private_key = list(account.secret_key()[:32])
         return json.dumps(
             {
-                'address': address,
-                'private_key': private_key.encode()
+                'address': str(pub_key),
+                'private_key': private_key
             }
         )
 
-    @cherrypy.expose
     def topup(self, network, to, amount):
         """
         Send a small amount of native currency to the specified wallet to handle gas fees. Return a status flag of success or fail and the native transaction data.
         """
+        msg = ""
         try:
+            # Connect to the network
             client = Client(network)
-            sender = Account(self.private_key)
+            # Get the sender account
+            try:
+                sender = Account(self.private_key)
+            except Exception as e:
+                msg = "ERROR: Invalid private key"
+                raise(e)
             signers = [sender]
-            ix = transfer(TransferParams(from_pubkey=sender.public_key(), to_pubkey=PublicKey(to), lamports=amount))
+            # Validate amount 
+            try:
+                lamports = int(amount)
+            except Exception as e:
+                msg = "ERROR: `amount` must be an int"
+                raise(e)
+            # Generate transaction
+            ix = transfer(TransferParams(from_pubkey=sender.public_key(), to_pubkey=PublicKey(to), lamports=lamports))
             tx = Transaction().add(ix)
-            response = client.send_transaction(tx, *signers).json()
+            # Send request
+            try:
+                response = client.send_transaction(tx, *signers)
+            except Exception as e:
+                msg = f"ERROR: Encountered exception while attempting to send transaction: {e}"
+                raise(e)
+            # Pull byte array from initial transaction
+            tx_payload = list(tx.serialize())
+
             if "error" not in response:
                 return json.dumps(
                     {
-                        'status': Status.Success,
-                        'tx': response['result']
+                        'status': HTTPStatus.OK,
+                        'msg': f"Successfully sent {amount * 1e-9} SOL to {to}",
+                        'tx': tx_payload,
+                        'response': response.get('result'),
                     }
                 )
-        except:
-            pass
-        finally:
+            else:
+                return json.dumps(
+                    {
+                        'status': HTTPStatus.BAD_REQUEST,
+                        'response': response,
+                        'tx': tx_payload,
+                    }
+                )
+        except Exception as e:
             return json.dumps(
                 {
-                    'status': Status.Failure,
-                    'tx': tx
+                    'status': HTTPStatus.BAD_REQUEST,
+                    'msg': msg,
                 }
             )
 
-    @cherrypy.expose
     def mint(self, network, contract, address, batch, sequence, limit, name, description, link, created, content='', **kw):
         """
         Mint a token on the specified network and contract, into the wallet specified by address.
@@ -98,76 +119,105 @@ class MetaplexAPI():
         content is an optional JSON string for customer-specific data.
         Return a status flag of success or fail and the native transaction data.
         """
-        tx = None
+        msg = ""
         try:
             client = Client(network)
             signers = [Account(self.private_key)]
             mint_to_params = MintToParams(
-                program_id=PublicKey(self.token_account),
-                mint=PublicKey(contract), # Is this the one?
+                program_id=PublicKey(self.token_program_id),
+                mint=PublicKey(contract),
                 dest=PublicKey(address),
-                owner=PublicKey(self.public_key),
+                mint_authority=PublicKey(self.public_key),
+                amount=1,
                 signers=signers,
             )
             ix = mint_to(mint_to_params)
-            tx = client.set_transaction(ix, *signers) 
-            response = client.send_transaction(tx).json()
+            tx = Transaction().add(ix) 
+            try:
+                response = client.send_transaction(tx, *signers)
+            except Exception as e:
+                msg = f"ERROR: Encountered exception while attempting to send transaction: {e}"
+                raise(e)
+            tx_payload = list(tx.serialize())
             if "error" not in response:
                 return json.dumps(
                     {
-                        'status': Status.Success,
-                        'tx': tx,
+                        'status': HTTPStatus.OK,
+                        'msg': f"Successfully minted 1 token to {address}",
+                        'response': response.get('result'),
+                        'tx': tx_payload,
+                    }
+                )
+            else:
+                return json.dumps(
+                    {
+                        'status': HTTPStatus.BAD_REQUEST,
+                        'response': response,
+                        'tx': tx_payload,
                     }
                 )
         except:
-            pass
-        finally:
             return json.dumps(
                 {
-                    'status': Status.Failure,
-                    'tx': tx
+                    'status': HTTPStatus.BAD_REQUEST,
+                    'msg': msg,
                 }
             )
 
-    @cherrypy.expose
-    def send(self, network, contract, sender, to, token, private_key, contract_address):
+    def send(self, network, contract, sender, to, token, encrypted_private_key, contract_address):
         """
         Transfer a token on a given network and contract from the sender to the recipient.
         May require a private key, if so this will be provided encrypted using Fernet: https://cryptography.io/en/latest/fernet/
         Return a status flag of success or fail and the native transaction data. 
         """
-        tx = None
+        msg = ""
         try:
             client = Client(network)
+            private_key = self.cipher.decrypt(encrypted_private_key).decode('utf-8')
             signers = [Account(self.private_key), Account(private_key)]
             spl_transfer_params = TransferParams(
                 program_id=PublicKey(self.token_account),
                 source=PublicKey(sender),
                 dest=PublicKey(to),
-                owner=PublicKey(self.public_key),
+                owner=PublicKey(contract_address),
                 signers=signers,
+                amount=1,
             )
             ix = spl_transfer(spl_transfer_params)
-            tx = client.set_transaction(ix, *signers) 
-            response = client.send_transaction(tx).json()
+            tx = Transaction().add(ix)
+            # Send request
+            try:
+                response = client.send_transaction(tx, *signers)
+            except Exception as e:
+                msg = f"ERROR: Encountered exception while attempting to send transaction: {e}"
+                raise(e)
+            # Pull byte array from initial transaction
+            tx_payload = list(tx.serialize())
             if "error" not in response:
                 return json.dumps(
                     {
-                        'status': Status.Success,
-                        'tx': tx,
+                        'status': HTTPStatus.OK,
+                        'msg': f"Successfully transfered token from {sender} to {to}",
+                        'tx': tx_payload,
+                        'response': response.get('result'),
                     }
                 )
-        except:
-            pass
-        finally:
+            else:
+                return json.dumps(
+                    {
+                        'status': HTTPStatus.BAD_REQUEST,
+                        'response': response,
+                        'payload': tx_payload,
+                    }
+                )
+        except Exception as e:
             return json.dumps(
                 {
-                    'status': Status.Failure,
-                    'tx': tx
+                    'status': HTTPStatus.BAD_REQUEST,
+                    'msg': msg,
                 }
             )
 
-    @cherrypy.expose
     def burn(self, network, contract, sender, token, private_key, contract_address):
         """
         Burn a token, permanently removing it from the blockchain.
@@ -192,7 +242,7 @@ class MetaplexAPI():
             if "error" not in response:
                 return json.dumps(
                     {
-                        'status': Status.Success,
+                        'status': HTTPStatus.OK,
                         'tx': tx,
                     }
                 )
@@ -201,9 +251,7 @@ class MetaplexAPI():
         finally:
             return json.dumps(
                 {
-                    'status': Status.Failure,
+                    'status': HTTPStatus.BAD_REQUEST,
                     'tx': tx
                 }
             )
-
-cherrypy.quickstart(MetaplexAPI())
