@@ -1,3 +1,5 @@
+from itertools import chain
+import struct
 from enum import IntEnum
 from construct import (
     BitStruct, BitsInteger, BitsSwapped, Bytes, Const, Flag, Int8ul, Int16ul, Int32ul, Int64ul, Padding, Switch
@@ -62,17 +64,43 @@ def create_associated_token_account_instruction(assosiated_token_account, payer,
     ]
     return TransactionInstruction(keys=keys, program_id=ASSOCIATED_TOKEN_ACCOUNT_PROGRAM_ID, data=b'')
 
-
-def create_metadata_instruction_data(name, symbol, uri, seller_fee_basis_points, creators):
-    _data = dict(
-        name=name,
-        symbol=symbol,
-        uri=uri,
-        seller_fee_basis_points=seller_fee_basis_points,
-        creators=creators
+def _get_data_buffer(name, symbol, uri, creators):
+    byte_fmt = "<" 
+    byte_fmt += "I" + "B"*len(name)
+    byte_fmt += "I" + "B"*len(symbol)
+    byte_fmt += "I" + "B"*len(uri)
+    byte_fmt += "h"
+    byte_fmt += "I"
+    creator_lens = list(map(len, creators))
+    creator_bytes = [list(c.encode()) for c in creators]
+    for l in creator_lens: 
+        byte_fmt +=  "I" + "B"*l
+    args =  [
+        len(name),
+        *list(name.encode()),
+        len(symbol),
+        *list(symbol.encode()),
+        len(uri),
+        *list(uri.encode()),
+        0,
+        len(creators),
+        *list(chain.from_iterable([[l, *c] for l, c in zip(creator_lens, creator_bytes)])),
+    ]
+    buffer = struct.pack(byte_fmt, *args)
+    return buffer
+    
+def create_metadata_instruction_data(name, symbol, creators):
+    _data = _get_data_buffer(name, symbol, " "*200, creators)
+    metadata_args_layout = cStruct(
+        "data" / Bytes(len(_data)),
+        "is_mutable" / Flag,
     )
-    _create_metadata_args = dict(create_metadata_args=dict(args=dict(data=_data, is_mutable=True)))
-    return INSTRUCTIONS_LAYOUT.build(
+    _create_metadata_args = dict(data=_data, is_mutable=True)
+    instruction_layout = cStruct(
+        "instruction_type" / Int8ul,
+        "args" / metadata_args_layout,
+    )
+    return instruction_layout.build(
         dict(
             instruction_type=InstructionType.CREATE_METADATA,
             args=_create_metadata_args,

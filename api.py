@@ -64,6 +64,7 @@ class MetaplexAPI():
                 ASSOCIATED_TOKEN_ACCOUNT_PROGRAM_ID,
             )[0]
             associated_token_account_ix = create_associated_token_account_instruction(
+                associated_token_account=recipient_key,
                 payer=self.public_key,
                 wallet_address=self.public_key,
                 token_mint_address=contract,
