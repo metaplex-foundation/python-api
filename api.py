@@ -29,6 +29,8 @@ class MetaplexAPI():
         address = None
         tx = None
         # TODO
+        # Connect to the network
+        client = Client(network)
         return json.dumps(
             {
                 'status': status,
