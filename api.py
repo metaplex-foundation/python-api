@@ -9,15 +9,33 @@ from solana.account import Account
 from solana.rpc.api import Client
 from solana.system_program import transfer, TransferParams 
 from spl.token.instructions import (
-    mint_to, MintToParams, transfer as spl_transfer, TransferParams, burn, BurnParams
+    mint_to, MintToParams,
+    transfer as spl_transfer, TransferParams,
+    burn, BurnParams,
+    initialize_mint, InitializeMintParams,
 )
+
+from metaplex.metadata import (
+    create_associated_token_account_instruction,
+    create_metadata_instruction_data, 
+    create_metadata_instruction,
+    ASSOCIATED_TOKEN_ACCOUNT_PROGRAM_ID,
+    TOKEN_PROGRAM_ID,
+    MAX_NAME_LENGTH,
+    MAX_SYMBOL_LENGTH,
+    MAX_URI_LENGTH,
+    MAX_CREATOR_LENGTH,
+    MAX_CREATOR_LIMIT,
+)
+
 import base58
+
+
 class MetaplexAPI():
 
     def __init__(self, cfg):
         self.private_key = list(base58.b58decode(cfg["KEYS"]["PRIVATE_KEY"]))[:32]
         self.public_key = cfg["KEYS"]["PUBLIC_KEY"]
-        self.token_program_id = cfg["KEYS"]["TOKEN_PROGRAM_ID"]
         self.cipher = Fernet(cfg["KEYS"]["DECRYTPTION_KEY"])
 
     def deploy(self, network, contract, name, symbol):
@@ -25,19 +43,77 @@ class MetaplexAPI():
         Deploy a contract to the blockchain (on networks that support contracts). Takes the network ID and contract name, plus initialisers of name and symbol. Process may vary significantly between blockchains.
         Returns status code of success or fail, the contract address, and the native transaction data.
         """
-        status = None
-        address = None
-        tx = None
-        # TODO
-        # Connect to the network
-        client = Client(network)
-        return json.dumps(
-            {
-                'status': status,
-                'address': address,
-                'tx': tx,
-            }
-        )
+        msg = ""
+        try:
+            client = Client(network)
+            tx = Transaction()
+            signers = [Account(self.private_key)]
+
+            initialize_mint_params = InitializeMintParams(
+                decimals=0,
+                program_id=PublicKey(TOKEN_PROGRAM_ID),
+                mint=PublicKey(contract),
+                owner=PublicKey(self.public_key),
+                freeze_authority=PublicKey(self.public_key),
+            )
+            initialize_mint_ix = initialize_mint(initialize_mint_params)
+            tx = tx.add(initialize_mint_ix)
+
+            recipient_key = PublicKey.find_program_address(
+                [bytes(self.public_key), bytes(TOKEN_PROGRAM_ID), bytes(contract)],
+                ASSOCIATED_TOKEN_ACCOUNT_PROGRAM_ID,
+            )[0]
+            associated_token_account_ix = create_associated_token_account_instruction(
+                payer=self.public_key,
+                wallet_address=self.public_key,
+                token_mint_address=contract,
+            )
+            tx = tx.add(associated_token_account_ix)        
+
+            create_metadata_ix = create_metadata_instruction(
+                data=create_metadata_instruction_data(name, symbol), # TO IMPLEMENT
+                update_authority=PublicKey(self.public_key),
+                mint_key=PublicKey(contract),
+                mint_authority_key=PublicKey(self.public_key),
+                payer=PublicKey(self.public_key),
+            )
+            tx = tx.add(create_metadata_ix)
+
+            # Send request
+            try:
+                response = client.send_transaction(tx, *signers)
+            except Exception as e:
+                msg = f"ERROR: Encountered exception while attempting to send transaction: {e}"
+                raise(e)
+            # Pull byte array from initial transaction
+            tx_payload = list(tx.serialize())
+
+            if "error" not in response:
+                return json.dumps(
+                    {
+                        'status': HTTPStatus.OK,
+                        'contract': contract,
+                        'msg': f"Successfully minted {contract}",
+                        'tx': tx_payload,
+                        'response': response.get('result'),
+                    }
+                )
+            else:
+                return json.dumps(
+                    {
+                        'status': HTTPStatus.BAD_REQUEST,
+                        'contract': contract,
+                        'response': response,
+                        'tx': tx_payload,
+                    }
+                )
+        except Exception as e:
+            return json.dumps(
+                {
+                    'status': HTTPStatus.BAD_REQUEST,
+                    'msg': msg,
+                }
+            )    
 
     def wallet(self):
         """ Generate a wallet on the specified network and return the address and private key. """
@@ -126,7 +202,7 @@ class MetaplexAPI():
             client = Client(network)
             signers = [Account(self.private_key)]
             mint_to_params = MintToParams(
-                program_id=PublicKey(self.token_program_id),
+                program_id=PublicKey(TOKEN_PROGRAM_ID),
                 mint=PublicKey(contract),
                 dest=PublicKey(address),
                 mint_authority=PublicKey(self.public_key),
@@ -179,7 +255,7 @@ class MetaplexAPI():
             signers = [Account(self.private_key), Account(private_key)]
             # TODO: Verify these params
             spl_transfer_params = TransferParams(
-                program_id=PublicKey(self.token_program_id),
+                program_id=PublicKey(TOKEN_PROGRAM_ID),
                 source=PublicKey(sender),
                 dest=PublicKey(to),
                 owner=PublicKey(self.public_key),
@@ -234,7 +310,7 @@ class MetaplexAPI():
             signers = [Account(self.private_key) ,Account(private_key)]
             # TODO: Verify these params
             burn_params = BurnParams(
-                program_id=PublicKey(self.token_program_id),
+                program_id=PublicKey(TOKEN_PROGRAM_ID),
                 account=PublicKey(sender),
                 mint=PublicKey(contract_address),
                 owner=PublicKey(self.public_key),
@@ -255,7 +331,7 @@ class MetaplexAPI():
                 return json.dumps(
                     {
                         'status': HTTPStatus.OK,
-                        'msg': f"Successfully transfered token from {sender} to {to}",
+                        'msg': f"Successfully burned token",
                         'tx': tx_payload,
                         'response': response.get('result'),
                     }
