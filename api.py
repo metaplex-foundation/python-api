@@ -108,7 +108,7 @@ class MetaplexAPI():
                         'status': HTTPStatus.OK,
                         'contract': str(mint_account.public_key()),
                         'msg': f"Successfully created mint {str(mint_account.public_key())}",
-                        'tx': response.get('result'),
+                        'tx': response.get('result') if skip_confirmation else response['result']['transaction']['signatures'],
                     }
                 )
             except Exception as e:
@@ -173,7 +173,7 @@ class MetaplexAPI():
                     {
                         'status': HTTPStatus.OK,
                         'msg': f"Successfully sent {lamports * 1e-9} SOL to {to}",
-                        'tx': response.get('result'),
+                        'tx': response.get('result') if skip_confirmation else response['result']['transaction']['signatures'],
                     }
                 )
             except Exception as e:
@@ -256,7 +256,7 @@ class MetaplexAPI():
                     {
                         'status': HTTPStatus.OK,
                         'msg': f"Successfully minted 1 token to {associated_token_account}",
-                        'tx': response.get('result'),
+                        'tx': response.get('result') if skip_confirmation else response['result']['transaction']['signatures'],
                     }
                 )
             except Exception as e:
@@ -349,7 +349,7 @@ class MetaplexAPI():
                     {
                         'status': HTTPStatus.OK,
                         'msg': f"Successfully transfered token from {sender} to {to}",
-                        'tx': response.get('result'),
+                        'tx': response.get('result') if skip_confirmation else response['result']['transaction']['signatures'],
                     }
                 )
             except Exception as e:
@@ -417,7 +417,7 @@ class MetaplexAPI():
                     {
                         'status': HTTPStatus.OK,
                         'msg': f"Successfully burned token {str(mint_account)} on {str(sender_account)}",
-                        'tx': response.get('result'),
+                        'tx': response.get('result') if skip_confirmation else response['result']['transaction']['signatures'],
                     }
                 )
             except Exception as e:
@@ -431,6 +431,56 @@ class MetaplexAPI():
                 }
             )
 
+def test(api):
+    network = "https://api.devnet.solana.com/"
+    client = Client(network)
+    client.request_airdrop(api.public_key, 1000000000)
+    letters = string.ascii_uppercase
+    name = ''.join([random.choice(letters) for i in range(32)])
+    symbol = ''.join([random.choice(letters) for i in range(10)])
+    print("Name:", name)
+    print("Symbol:", symbol)
+    deploy_response = json.loads(api.deploy(network, "", name, symbol, skip_confirmation=False))
+    print("Deploy:", deploy_response)
+    if deploy_response["status"] != 200:
+        print("Failure!")
+        return
+    contract = deploy_response.get("contract")
+    wallet = json.loads(api.wallet())
+    address1 = wallet.get('address')
+    encrypted_pk1 = api.cipher.encrypt(bytes(wallet.get('private_key')))
+    topup_response = json.loads(api.topup(network, address1, skip_confirmation=False))
+    print(f"Topup {address1}:", topup_response)
+    if topup_response["status"] != 200:
+        print("Failure!")
+        return
+    mint_to_response = json.loads(api.mint(network, contract, address1, "", "", "", "", "", "", "", skip_confirmation=False))
+    print("Mint:", mint_to_response)
+    if mint_to_response["status"] != 200:
+        print("Failure!")
+        return
+    wallet2 = json.loads(api.wallet())
+    address2 = wallet2.get('address')
+    encrypted_pk2 = api.cipher.encrypt(bytes(wallet2.get('private_key')))
+    client.request_airdrop(api.public_key, 1000000000)
+    topup_response2 = json.loads(api.topup(network, address2, skip_confirmation=False))
+    print(f"Topup {address2}:", topup_response2)
+    if topup_response2["status"] != 200:
+        print("Failure!")
+        return
+    send_response = json.loads(api.send(network, contract, address1, address2, "", encrypted_pk1, "", skip_confirmation=False))
+    print(f"Transfer:", send_response)
+    if send_response["status"] != 200:
+        print("Failure!")
+        return
+    burn_response = json.loads(api.burn(network, contract, address2, "", encrypted_pk2, "", skip_confirmation=False))
+    print("Burn:", burn_response)
+    if burn_response["status"] != 200:
+        print("Failure!")
+        return
+    print("Success!")
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--test", default=False, action="store_true")
@@ -441,35 +491,4 @@ if __name__ == "__main__":
 
     # Run test
     if args.test:
-        network = "https://api.devnet.solana.com/"
-        client = Client(network)
-        print(client.request_airdrop(api.public_key, 1000000000))
-        letters = string.ascii_uppercase
-        name = ''.join([random.choice(letters) for i in range(32)])
-        symbol = ''.join([random.choice(letters) for i in range(10)])
-        print("Name:", name)
-        print("Symbol:", symbol)
-        deploy_response = json.loads(api.deploy(network, "", name, symbol, skip_confirmation=False))
-        print(deploy_response)
-        contract = deploy_response.get("contract")
-        print(contract)
-        wallet = json.loads(api.wallet())
-        address1 = wallet.get('address')
-        encrypted_pk1 = api.cipher.encrypt(bytes(wallet.get('private_key')))
-        print("Address1:", address1)
-        topup_response = json.loads(api.topup(network, address1, skip_confirmation=False))
-        print(topup_response)
-        mint_to_response = json.loads(api.mint(network, contract, address1, "", "", "", "", "", "", "", skip_confirmation=False))
-        print(mint_to_response)
-        wallet2 = json.loads(api.wallet())
-        address2 = wallet2.get('address')
-        encrypted_pk2 = api.cipher.encrypt(bytes(wallet2.get('private_key')))
-        print("Address2:", address2)
-        print(client.request_airdrop(api.public_key, 1000000000))
-        topup_response2 = json.loads(api.topup(network, address2, skip_confirmation=False))
-        print(topup_response2)
-        send_response = json.loads(api.send(network, contract, address1, address2, "", encrypted_pk1, "", skip_confirmation=False))
-        print(send_response)
-        burn_response = json.loads(api.burn(network, contract, address2, "", encrypted_pk2, "", skip_confirmation=False))
-        print(burn_response)
-        print("Success!")
+        test(api)
