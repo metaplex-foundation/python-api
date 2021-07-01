@@ -24,6 +24,7 @@ from metaplex.metadata import (
     TOKEN_PROGRAM_ID,
 )
 
+import base64
 import base58
 
 
@@ -42,19 +43,23 @@ class MetaplexAPI():
         """
         msg = ""
         try:
+            # Initalize Clinet
             client = Client(network)
-            tx = Transaction()
+            # List non-derived accounts
             source_account = Account(self.private_key)
             mint_account = Account()
             token_account = TOKEN_PROGRAM_ID 
+            # List signers
             signers = [source_account, mint_account]
+            # Start transaction
+            tx = Transaction()
+            # Get the minimum rent balance for a mint account
             try:
                 min_rent_reseponse = client.get_minimum_balance_for_rent_exemption(MINT_LAYOUT.sizeof())
                 lamports = min_rent_reseponse["result"]
             except Exception as e:
                 msg = "ERROR: Failed to receive min balance for rent exemption"
                 raise(e)
-
             # Generate Mint 
             create_mint_account_ix = create_account(
                 CreateAccountParams(
@@ -76,7 +81,6 @@ class MetaplexAPI():
                 )
             )
             tx = tx.add(initialize_mint_ix)
-
             # Create Token Metadata
             create_metadata_ix = create_metadata_instruction(
                 data=create_metadata_instruction_data(name, symbol, [str(source_account.public_key())]),
@@ -86,22 +90,18 @@ class MetaplexAPI():
                 payer=source_account.public_key(),
             )
             tx = tx.add(create_metadata_ix)
-
             # Send request
             try:
                 response = client.send_transaction(tx, *signers)
             except Exception as e:
                 msg = f"ERROR: Encountered exception while attempting to send transaction: {e}"
                 raise(e)
-            # Pull byte array from initial transaction
-            tx_payload = list(tx.serialize())
-
             if "error" not in response:
                 return json.dumps(
                     {
                         'status': HTTPStatus.OK,
                         'contract': str(mint_account.public_key()),
-                        'msg': f"Successfully minted {str(mint_account.public_key())}",
+                        'msg': f"Successfully created mint {str(mint_account.public_key())}",
                         'tx': response.get('result'),
                     }
                 )
@@ -109,9 +109,7 @@ class MetaplexAPI():
                 return json.dumps(
                     {
                         'status': HTTPStatus.BAD_REQUEST,
-                        'contract': str(mint_account.public_key()),
                         'response': response,
-                        'tx_payload': tx_payload,
                     }
                 )
         except Exception as e:
@@ -142,14 +140,14 @@ class MetaplexAPI():
         try:
             # Connect to the network
             client = Client(network)
-            # Get the sender account
-            try:
-                sender = Account(self.private_key)
-            except Exception as e:
-                msg = "ERROR: Invalid private key"
-                raise(e)
-            signers = [sender]
-            # Validate amount 
+            # List accounts 
+            sender_account = Account(self.private_key)
+            dest_account = PublicKey(to)
+            # List signers
+            signers = [sender_account]
+            # Start transaction
+            tx = Transaction()
+            # Determine the amount to send 
             try:
                 if amount is None:
                     min_rent_reseponse = client.get_minimum_balance_for_rent_exemption(ACCOUNT_LAYOUT.sizeof())
@@ -160,24 +158,20 @@ class MetaplexAPI():
                 msg = "ERROR: `amount` must be an int"
                 raise(e)
             # Generate transaction
-            ix = transfer(TransferParams(from_pubkey=sender.public_key(), to_pubkey=PublicKey(to), lamports=lamports))
-            tx = Transaction().add(ix)
+            transfer_ix = transfer(TransferParams(from_pubkey=sender_account.public_key(), to_pubkey=dest_account, lamports=lamports))
+            tx = tx.add(transfer_ix)
             # Send request
             try:
                 response = client.send_transaction(tx, *signers)
             except Exception as e:
                 msg = f"ERROR: Encountered exception while attempting to send transaction: {e}"
                 raise(e)
-            # Pull byte array from initial transaction
-            tx_payload = list(tx.serialize())
-
             if "error" not in response:
                 return json.dumps(
                     {
                         'status': HTTPStatus.OK,
-                        'msg': f"Successfully sent {amount * 1e-9} SOL to {to}",
+                        'msg': f"Successfully sent {lamports * 1e-9} SOL to {to}",
                         'tx': response.get('result'),
-                        'tx_payload': tx_payload,
                     }
                 )
             else:
@@ -185,7 +179,6 @@ class MetaplexAPI():
                     {
                         'status': HTTPStatus.BAD_REQUEST,
                         'response': response,
-                        'tx_payload': tx_payload,
                     }
                 )
         except Exception as e:
@@ -210,53 +203,60 @@ class MetaplexAPI():
         """
         msg = ""
         try:
+            # Initialize Client
             client = Client(network)
+            # List non-derived accounts
             source_account = Account(self.private_key)
             mint_account = PublicKey(contract)
             user_account = PublicKey(address)
             token_account = TOKEN_PROGRAM_ID
+            # List signers
             signers = [source_account]
+            # Start transaction
             tx = Transaction()
-
             # Create Associated Token Account
-            recipient_key = PublicKey.find_program_address(
+            associated_token_account = PublicKey.find_program_address(
                 [bytes(user_account), bytes(token_account), bytes(mint_account)],
                 ASSOCIATED_TOKEN_ACCOUNT_PROGRAM_ID,
             )[0]
-            associated_token_account_ix = create_associated_token_account_instruction(
-                associated_token_account=recipient_key,
-                payer=source_account.public_key(),
-                wallet_address=user_account,
-                token_mint_address=mint_account,
-            )
-            tx = tx.add(associated_token_account_ix)        
-
+            associated_token_account_info = client.get_account_info(associated_token_account)
+            # Check if PDA is initialized. If not, create the account
+            account_info = associated_token_account_info['result']['value']
+            if account_info is not None: 
+                account_state = ACCOUNT_LAYOUT.parse(base64.b64decode(account_info['data'][0])).state
+            else:
+                account_state = 0
+            if account_state == 0:
+                associated_token_account_ix = create_associated_token_account_instruction(
+                    associated_token_account=associated_token_account,
+                    payer=source_account.public_key(), # signer
+                    wallet_address=user_account,
+                    token_mint_address=mint_account,
+                )
+                tx = tx.add(associated_token_account_ix)  
             # Mint NFT to the newly create associated token account
             mint_to_ix = mint_to(
                 MintToParams(
                     program_id=TOKEN_PROGRAM_ID,
                     mint=mint_account,
-                    dest=recipient_key,
+                    dest=associated_token_account,
                     mint_authority=source_account.public_key(),
                     amount=1,
                     signers=[source_account.public_key()],
                 )
             )
             tx = tx.add(mint_to_ix) 
-
             try:
                 response = client.send_transaction(tx, *signers)
             except Exception as e:
                 msg = f"ERROR: Encountered exception while attempting to send transaction: {e}"
                 raise(e)
-            tx_payload = list(tx.serialize())
             if "error" not in response:
                 return json.dumps(
                     {
                         'status': HTTPStatus.OK,
-                        'msg': f"Successfully minted 1 token to {recipient_key}",
+                        'msg': f"Successfully minted 1 token to {associated_token_account}",
                         'tx': response.get('result'),
-                        'tx_payload': tx_payload,
                     }
                 )
             else:
@@ -264,7 +264,6 @@ class MetaplexAPI():
                     {
                         'status': HTTPStatus.BAD_REQUEST,
                         'response': response,
-                        'tx_payload': tx_payload,
                     }
                 )
         except:
@@ -283,35 +282,76 @@ class MetaplexAPI():
         """
         msg = ""
         try:
+            # Initialize Client
             client = Client(network)
-            private_key = self.cipher.decrypt(encrypted_private_key).decode('ascii')
-            signers = [Account(self.private_key), Account(private_key)]
-            # TODO: Verify these params
-            spl_transfer_params = SPLTransferParams(
-                program_id=TOKEN_PROGRAM_ID,
-                source=PublicKey(sender),
-                dest=PublicKey(to),
-                owner=PublicKey(self.public_key),
-                signers=signers,
-                amount=1,
+            # Decrypt the private key
+            private_key = list(self.cipher.decrypt(encrypted_private_key))
+            assert(len(private_key) == 32)
+            # List non-derived accounts
+            source_account = Account(self.private_key)
+            owner_account = Account(private_key) # Owner of contract 
+            sender_account = PublicKey(sender) # Public key of `owner_account`
+            token_account = TOKEN_PROGRAM_ID
+            mint_account = PublicKey(contract)
+            dest_account = PublicKey(to)
+            # This is a very rare care, but in the off chance that the source wallet is the recipient of a transfer we don't need a list of 2 keys
+            if private_key == self.private_key:
+                signers = [source_account]
+            else:
+                signers = [source_account, owner_account]
+            # Start transaction
+            tx = Transaction()
+            # Find PDA for sender
+            token_pda_address = PublicKey.find_program_address(
+                [bytes(sender_account), bytes(token_account), bytes(mint_account)],
+                ASSOCIATED_TOKEN_ACCOUNT_PROGRAM_ID,
+            )[0]
+            if client.get_account_info(token_pda_address)['result']['value'] is None: 
+                msg = f"Associated token account for {contract} does not exist for {str(sender_account)}"
+                raise Exception
+            # Check if PDA is initialized for receiver. If not, create the account
+            associated_token_account = PublicKey.find_program_address(
+                [bytes(dest_account), bytes(token_account), bytes(mint_account)],
+                ASSOCIATED_TOKEN_ACCOUNT_PROGRAM_ID,
+            )[0]
+            associated_token_account_info = client.get_account_info(associated_token_account)
+            account_info = associated_token_account_info['result']['value']
+            if account_info is not None: 
+                account_state = ACCOUNT_LAYOUT.parse(base64.b64decode(account_info['data'][0])).state
+            else:
+                account_state = 0
+            if account_state == 0:
+                associated_token_account_ix = create_associated_token_account_instruction(
+                    associated_token_account=associated_token_account,
+                    payer=source_account.public_key(), # signer
+                    wallet_address=dest_account,
+                    token_mint_address=mint_account,
+                )
+                tx = tx.add(associated_token_account_ix)        
+            # Transfer the Token from the sender account to the associated token account
+            spl_transfer_ix = spl_transfer(
+                SPLTransferParams(
+                    program_id=token_account,
+                    source=token_pda_address,
+                    dest=associated_token_account,
+                    owner=sender_account,
+                    signers=[],
+                    amount=1,
+                )
             )
-            ix = spl_transfer(spl_transfer_params)
-            tx = Transaction().add(ix)
+            tx = tx.add(spl_transfer_ix)
             # Send request
             try:
                 response = client.send_transaction(tx, *signers)
             except Exception as e:
                 msg = f"ERROR: Encountered exception while attempting to send transaction: {e}"
                 raise(e)
-            # Pull byte array from initial transaction
-            tx_payload = list(tx.serialize())
             if "error" not in response:
                 return json.dumps(
                     {
                         'status': HTTPStatus.OK,
                         'msg': f"Successfully transfered token from {sender} to {to}",
                         'tx': response.get('result'),
-                        'tx_payload': tx_payload,
                     }
                 )
             else:
@@ -319,7 +359,6 @@ class MetaplexAPI():
                     {
                         'status': HTTPStatus.BAD_REQUEST,
                         'response': response,
-                        'tx_payload': tx_payload,
                     }
                 )
         except Exception as e:
@@ -338,35 +377,52 @@ class MetaplexAPI():
         """
         msg = ""
         try:
+            # Initialize Client
             client = Client(network)
-            private_key = self.cipher.decrypt(encrypted_private_key).decode('ascii')
-            signers = [Account(self.private_key), Account(private_key)]
-            # TODO: Verify these params
-            burn_params = BurnParams(
-                program_id=TOKEN_PROGRAM_ID,
-                account=PublicKey(sender),
-                mint=PublicKey(contract_address),
-                owner=PublicKey(self.public_key),
-                amount=1,
-                signers=signers,
+            # Decrypt the private key
+            private_key = list(self.cipher.decrypt(encrypted_private_key))
+            assert(len(private_key) == 32)
+            # List accounts
+            owner_account = Account(private_key) # Owner of contract 
+            sender_account = PublicKey(sender) # Public key of `owner_account` 
+            token_account = TOKEN_PROGRAM_ID
+            mint_account = PublicKey(contract)
+            # List signers
+            signers = [owner_account]
+            # Start transaction
+            tx = Transaction()
+            # Find PDA for sender
+            token_pda_address = PublicKey.find_program_address(
+                [bytes(sender_account), bytes(token_account), bytes(mint_account)],
+                ASSOCIATED_TOKEN_ACCOUNT_PROGRAM_ID,
+            )[0]
+            if client.get_account_info(token_pda_address)['result']['value'] is None: 
+                msg = f"Associated token account for {contract} does not exist for {str(sender_account)}"
+                raise Exception
+            # Burn token
+            burn_ix = burn(
+                BurnParams(
+                    program_id=token_account,
+                    account=token_pda_address,
+                    mint=mint_account,
+                    owner=sender_account,
+                    amount=1,
+                    signers=[],
+                )
             )
-            ix = burn(burn_params)
-            tx = Transaction().add(ix)
+            tx = tx.add(burn_ix)
             # Send request
             try:
                 response = client.send_transaction(tx, *signers)
             except Exception as e:
                 msg = f"ERROR: Encountered exception while attempting to send transaction: {e}"
                 raise(e)
-            # Pull byte array from initial transaction
-            tx_payload = list(tx.serialize())
             if "error" not in response:
                 return json.dumps(
                     {
                         'status': HTTPStatus.OK,
-                        'msg': f"Successfully burned token",
+                        'msg': f"Successfully burned token {str(mint_account)} on {str(sender_account)}",
                         'tx': response.get('result'),
-                        'tx_payload': tx_payload,
                     }
                 )
             else:
@@ -374,7 +430,6 @@ class MetaplexAPI():
                     {
                         'status': HTTPStatus.BAD_REQUEST,
                         'response': response,
-                        'tx_payload': tx_payload,
                     }
                 )
         except Exception as e:
