@@ -474,7 +474,7 @@ def test(api):
     if topup_response["status"] != 200:
         print("Failure!")
         return
-    mint_to_response = json.loads(api.mint(network, contract, address1, "", "", "", "", "", "https://www.rarenft.com/nft.png", "", skip_confirmation=False))
+    mint_to_response = json.loads(api.mint(network, contract, address1, "", "", "", "", "", "https://arweave.net/1eH7bZS-6HZH4YOc8T_tGp2Rq25dlhclXJkoa6U55mM/", "", skip_confirmation=False))
     print("Mint:", mint_to_response)
     if mint_to_response["status"] != 200:
         print("Failure!")
