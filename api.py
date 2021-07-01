@@ -1,4 +1,6 @@
 import configparser
+import string
+import random
 import json
 from http import HTTPStatus
 from cryptography.fernet import Fernet
@@ -45,10 +47,12 @@ class MetaplexAPI():
         try:
             # Initalize Clinet
             client = Client(network)
+            msg += "Initialized client"
             # List non-derived accounts
             source_account = Account(self.private_key)
             mint_account = Account()
             token_account = TOKEN_PROGRAM_ID 
+            msg += " | Gathered accounts"
             # List signers
             signers = [source_account, mint_account]
             # Start transaction
@@ -57,8 +61,9 @@ class MetaplexAPI():
             try:
                 min_rent_reseponse = client.get_minimum_balance_for_rent_exemption(MINT_LAYOUT.sizeof())
                 lamports = min_rent_reseponse["result"]
+                msg += f" | Fetched minimum rent exemption balance: {lamports * 1e-9} SOL"
             except Exception as e:
-                msg = "ERROR: Failed to receive min balance for rent exemption"
+                msg += " | ERROR: Failed to receive min balance for rent exemption"
                 raise(e)
             # Generate Mint 
             create_mint_account_ix = create_account(
@@ -71,6 +76,7 @@ class MetaplexAPI():
                 )
             )
             tx = tx.add(create_mint_account_ix)
+            msg += f" | Creating mint account {str(mint_account.public_key())} with {MINT_LAYOUT.sizeof()} bytes"
             initialize_mint_ix = initialize_mint(
                 InitializeMintParams(
                     decimals=0,
@@ -81,6 +87,7 @@ class MetaplexAPI():
                 )
             )
             tx = tx.add(initialize_mint_ix)
+            msg += f" | Initializing mint account {str(mint_account.public_key())}"
             # Create Token Metadata
             create_metadata_ix = create_metadata_instruction(
                 data=create_metadata_instruction_data(name, symbol, [str(source_account.public_key())]),
@@ -90,13 +97,10 @@ class MetaplexAPI():
                 payer=source_account.public_key(),
             )
             tx = tx.add(create_metadata_ix)
+            msg += f" | Creating metadata account"
             # Send request
             try:
                 response = client.send_transaction(tx, *signers)
-            except Exception as e:
-                msg = f"ERROR: Encountered exception while attempting to send transaction: {e}"
-                raise(e)
-            if "error" not in response:
                 return json.dumps(
                     {
                         'status': HTTPStatus.OK,
@@ -105,13 +109,9 @@ class MetaplexAPI():
                         'tx': response.get('result'),
                     }
                 )
-            else:
-                return json.dumps(
-                    {
-                        'status': HTTPStatus.BAD_REQUEST,
-                        'response': response,
-                    }
-                )
+            except Exception as e:
+                msg += f" | ERROR: Encountered exception while attempting to send transaction: {e}"
+                raise(e)
         except Exception as e:
             return json.dumps(
                 {
@@ -140,9 +140,11 @@ class MetaplexAPI():
         try:
             # Connect to the network
             client = Client(network)
+            msg += "Initialized client"
             # List accounts 
             sender_account = Account(self.private_key)
             dest_account = PublicKey(to)
+            msg += " | Gathered accounts"
             # List signers
             signers = [sender_account]
             # Start transaction
@@ -154,19 +156,17 @@ class MetaplexAPI():
                     lamports = min_rent_reseponse["result"]
                 else:
                     lamports = int(amount)
+                msg += f" | Fetched lamports: {lamports * 1e-9} SOL"
             except Exception as e:
-                msg = "ERROR: couldn't process lamports" 
+                msg += " | ERROR: couldn't process lamports" 
                 raise(e)
             # Generate transaction
             transfer_ix = transfer(TransferParams(from_pubkey=sender_account.public_key(), to_pubkey=dest_account, lamports=lamports))
             tx = tx.add(transfer_ix)
+            msg += f" | Transferring funds"
             # Send request
             try:
                 response = client.send_transaction(tx, *signers)
-            except Exception as e:
-                msg = f"ERROR: Encountered exception while attempting to send transaction: {e}"
-                raise(e)
-            if "error" not in response:
                 return json.dumps(
                     {
                         'status': HTTPStatus.OK,
@@ -174,13 +174,9 @@ class MetaplexAPI():
                         'tx': response.get('result'),
                     }
                 )
-            else:
-                return json.dumps(
-                    {
-                        'status': HTTPStatus.BAD_REQUEST,
-                        'response': response,
-                    }
-                )
+            except Exception as e:
+                msg += f" | ERROR: Encountered exception while attempting to send transaction: {e}"
+                raise(e)
         except Exception as e:
             return json.dumps(
                 {
@@ -205,11 +201,13 @@ class MetaplexAPI():
         try:
             # Initialize Client
             client = Client(network)
+            msg += "Initialized client"
             # List non-derived accounts
             source_account = Account(self.private_key)
             mint_account = PublicKey(contract)
             user_account = PublicKey(address)
             token_account = TOKEN_PROGRAM_ID
+            msg += " | Gathered accounts"
             # List signers
             signers = [source_account]
             # Start transaction
@@ -219,7 +217,9 @@ class MetaplexAPI():
                 [bytes(user_account), bytes(token_account), bytes(mint_account)],
                 ASSOCIATED_TOKEN_ACCOUNT_PROGRAM_ID,
             )[0]
+            msg += f" | Found ATA PDA {str(associated_token_account)}"
             associated_token_account_info = client.get_account_info(associated_token_account)
+            msg += " | Fetched ATA Info"
             # Check if PDA is initialized. If not, create the account
             account_info = associated_token_account_info['result']['value']
             if account_info is not None: 
@@ -227,6 +227,7 @@ class MetaplexAPI():
             else:
                 account_state = 0
             if account_state == 0:
+                msg += " | Creating new ATA from PDA"
                 associated_token_account_ix = create_associated_token_account_instruction(
                     associated_token_account=associated_token_account,
                     payer=source_account.public_key(), # signer
@@ -246,12 +247,9 @@ class MetaplexAPI():
                 )
             )
             tx = tx.add(mint_to_ix) 
+            msg += f" | Minting 1 token to ATA {str(associated_token_account)}"
             try:
                 response = client.send_transaction(tx, *signers)
-            except Exception as e:
-                msg = f"ERROR: Encountered exception while attempting to send transaction: {e}"
-                raise(e)
-            if "error" not in response:
                 return json.dumps(
                     {
                         'status': HTTPStatus.OK,
@@ -259,13 +257,9 @@ class MetaplexAPI():
                         'tx': response.get('result'),
                     }
                 )
-            else:
-                return json.dumps(
-                    {
-                        'status': HTTPStatus.BAD_REQUEST,
-                        'response': response,
-                    }
-                )
+            except Exception as e:
+                msg += f" | ERROR: Encountered exception while attempting to send transaction: {e}"
+                raise(e)
         except:
             return json.dumps(
                 {
@@ -284,9 +278,11 @@ class MetaplexAPI():
         try:
             # Initialize Client
             client = Client(network)
+            msg += "Initialized client"
             # Decrypt the private key
             private_key = list(self.cipher.decrypt(encrypted_private_key))
             assert(len(private_key) == 32)
+            msg += " | Decoded private key"
             # List non-derived accounts
             source_account = Account(self.private_key)
             owner_account = Account(private_key) # Owner of contract 
@@ -294,6 +290,7 @@ class MetaplexAPI():
             token_account = TOKEN_PROGRAM_ID
             mint_account = PublicKey(contract)
             dest_account = PublicKey(to)
+            msg += " | Gathered accounts"
             # This is a very rare care, but in the off chance that the source wallet is the recipient of a transfer we don't need a list of 2 keys
             if private_key == self.private_key:
                 signers = [source_account]
@@ -307,8 +304,9 @@ class MetaplexAPI():
                 ASSOCIATED_TOKEN_ACCOUNT_PROGRAM_ID,
             )[0]
             if client.get_account_info(token_pda_address)['result']['value'] is None: 
-                msg = f"Associated token account for {contract} does not exist for {str(sender_account)}"
+                msg += f" | Associated token account for {contract} does not exist for {str(sender_account)}"
                 raise Exception
+            msg += " | Found sender PDA"
             # Check if PDA is initialized for receiver. If not, create the account
             associated_token_account = PublicKey.find_program_address(
                 [bytes(dest_account), bytes(token_account), bytes(mint_account)],
@@ -321,6 +319,7 @@ class MetaplexAPI():
             else:
                 account_state = 0
             if account_state == 0:
+                msg += " | Creating Receiver PDA"
                 associated_token_account_ix = create_associated_token_account_instruction(
                     associated_token_account=associated_token_account,
                     payer=source_account.public_key(), # signer
@@ -340,13 +339,10 @@ class MetaplexAPI():
                 )
             )
             tx = tx.add(spl_transfer_ix)
+            msg += f" | Transferring token from {sender} to {to}"
             # Send request
             try:
                 response = client.send_transaction(tx, *signers)
-            except Exception as e:
-                msg = f"ERROR: Encountered exception while attempting to send transaction: {e}"
-                raise(e)
-            if "error" not in response:
                 return json.dumps(
                     {
                         'status': HTTPStatus.OK,
@@ -354,13 +350,9 @@ class MetaplexAPI():
                         'tx': response.get('result'),
                     }
                 )
-            else:
-                return json.dumps(
-                    {
-                        'status': HTTPStatus.BAD_REQUEST,
-                        'response': response,
-                    }
-                )
+            except Exception as e:
+                msg += f" | ERROR: Encountered exception while attempting to send transaction: {e}"
+                raise(e)
         except Exception as e:
             return json.dumps(
                 {
@@ -379,14 +371,17 @@ class MetaplexAPI():
         try:
             # Initialize Client
             client = Client(network)
+            msg += "Initialized client"
             # Decrypt the private key
             private_key = list(self.cipher.decrypt(encrypted_private_key))
             assert(len(private_key) == 32)
+            msg += " | Decoded private key"
             # List accounts
             owner_account = Account(private_key) # Owner of contract 
             sender_account = PublicKey(sender) # Public key of `owner_account` 
             token_account = TOKEN_PROGRAM_ID
             mint_account = PublicKey(contract)
+            msg += " | Gathered accounts"
             # List signers
             signers = [owner_account]
             # Start transaction
@@ -397,8 +392,9 @@ class MetaplexAPI():
                 ASSOCIATED_TOKEN_ACCOUNT_PROGRAM_ID,
             )[0]
             if client.get_account_info(token_pda_address)['result']['value'] is None: 
-                msg = f"Associated token account for {contract} does not exist for {str(sender_account)}"
+                msg += f" | Associated token account for {contract} does not exist for {str(sender_account)}"
                 raise Exception
+            msg += " | Found token PDA"
             # Burn token
             burn_ix = burn(
                 BurnParams(
@@ -411,13 +407,10 @@ class MetaplexAPI():
                 )
             )
             tx = tx.add(burn_ix)
+            msg += " | Burning token"
             # Send request
             try:
                 response = client.send_transaction(tx, *signers)
-            except Exception as e:
-                msg = f"ERROR: Encountered exception while attempting to send transaction: {e}"
-                raise(e)
-            if "error" not in response:
                 return json.dumps(
                     {
                         'status': HTTPStatus.OK,
@@ -425,13 +418,9 @@ class MetaplexAPI():
                         'tx': response.get('result'),
                     }
                 )
-            else:
-                return json.dumps(
-                    {
-                        'status': HTTPStatus.BAD_REQUEST,
-                        'response': response,
-                    }
-                )
+            except Exception as e:
+                msg += f" | ERROR: Encountered exception while attempting to send transaction: {e}"
+                raise(e)
         except Exception as e:
             return json.dumps(
                 {
@@ -444,3 +433,34 @@ if __name__ == "__main__":
     cfg = configparser.ConfigParser()
     cfg.read("config.ini")
     api = MetaplexAPI(cfg)
+    network = "https://api.devnet.solana.com/"
+    client = Client(network)
+    client.request_airdrop(api.public_key, 10)
+    letters = string.ascii_uppercase
+    name = ''.join([random.choice(letters) for i in range(32)])
+    symbol = ''.join([random.choice(letters) for i in range(10)])
+    print("Name:", name)
+    print("Symbol:", symbol)
+    deploy_response = json.loads(api.deploy(network, "", name, symbol))
+    print(deploy_response)
+    contract = deploy_response.get("contract")
+    print(contract)
+    wallet = json.loads(api.wallet())
+    address1 = wallet.get('address')
+    encrypted_pk1 = api.cipher.encrypt(bytes(wallet.get('private_key')))
+    print("Address1:", address1)
+    topup_response = json.loads(api.topup(network, address1, 1000000000))
+    print(topup_response)
+    mint_to_response = json.loads(api.mint(network, contract, address1, "", "", "", "", "", "", ""))
+    print(mint_to_response)
+    wallet2 = json.loads(api.wallet())
+    address2 = wallet2.get('address')
+    encrypted_pk2 = api.cipher.encrypt(bytes(wallet2.get('private_key')))
+    print("Address2:", address2)
+    topup_response2 = json.loads(api.topup(network, address2, 1000000000))
+    print(topup_response2)
+    send_response = json.loads(api.send(network, contract, address1, address2, "", encrypted_pk1, ""))
+    print(send_response)
+    burn_response = json.loads(api.burn(network, contract, address2, "", encrypted_pk2, ""))
+    print(burn_response)
+    print("Success!")
