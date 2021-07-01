@@ -4,14 +4,11 @@ from http import HTTPStatus
 from cryptography.fernet import Fernet
 
 from solana.publickey import PublicKey 
-from solana.blockhash import Blockhash
-from solana.rpc.commitment import Commitment, Max
-import solana.rpc.types as types
 from solana.transaction import Transaction
 from solana.account import Account 
 from solana.rpc.api import Client
 from solana.system_program import transfer, TransferParams, create_account, CreateAccountParams 
-from spl.token._layouts import MINT_LAYOUT
+from spl.token._layouts import MINT_LAYOUT, ACCOUNT_LAYOUT
 from spl.token.instructions import (
     mint_to, MintToParams,
     transfer as spl_transfer, TransferParams as SPLTransferParams,
@@ -25,11 +22,6 @@ from metaplex.metadata import (
     create_metadata_instruction,
     ASSOCIATED_TOKEN_ACCOUNT_PROGRAM_ID,
     TOKEN_PROGRAM_ID,
-    MAX_NAME_LENGTH,
-    MAX_SYMBOL_LENGTH,
-    MAX_URI_LENGTH,
-    MAX_CREATOR_LENGTH,
-    MAX_CREATOR_LIMIT,
 )
 
 import base58
@@ -42,92 +34,7 @@ class MetaplexAPI():
         self.public_key = cfg["KEYS"]["PUBLIC_KEY"]
         self.cipher = Fernet(cfg["KEYS"]["DECRYPTION_KEY"])
 
-    def create_mint(self, network):
-        msg = ""
-        try:
-            # Create a new keypair
-            mint_account = Account()
 
-            client = Client(network)
-            tx = Transaction()
-            try:
-                sender = Account(self.private_key)
-            except Exception as e:
-                msg = "ERROR: Invalid private key"
-                raise(e)
-            signers = [sender, mint_account] 
-            # Validate amount 
-            try:
-                min_rent_reseponse = client.get_minimum_balance_for_rent_exemption(MINT_LAYOUT.sizeof())
-                lamports = min_rent_reseponse["result"]
-            except Exception as e:
-                msg = "ERROR: `amount` must be an int"
-                raise(e)
-
-            # Generate transaction
-            ix = create_account(
-                CreateAccountParams(
-                    from_pubkey=sender.public_key(),
-                    new_account_pubkey=mint_account.public_key(),
-                    lamports=lamports,
-                    space=MINT_LAYOUT.sizeof(),
-                    program_id=TOKEN_PROGRAM_ID,
-                )
-            )
-            tx = tx.add(ix)
-            initialize_mint_params = InitializeMintParams(
-                decimals=0,
-                program_id=TOKEN_PROGRAM_ID,
-                mint=mint_account.public_key(),
-                mint_authority=sender.public_key(),
-                freeze_authority=sender.public_key(),
-            )
-            initialize_mint_ix = initialize_mint(initialize_mint_params)
-
-            tx = tx.add(initialize_mint_ix)
-            try:
-                import pdb; pdb.set_trace()
-                blockhash_resp = client._provider.make_request(types.RPCMethod("getRecentBlockhash"), {client._comm_key: Max})
-                if not blockhash_resp["result"]:
-                    raise RuntimeError("failed to get recent blockhash")
-                tx.recent_blockhash = Blockhash(blockhash_resp["result"]["value"]["blockhash"])
-                tx.sign(*signers)
-                response = client.send_raw_transaction(tx.serialize(), opts=types.TxOpts())
-            except Exception as err:
-                raise RuntimeError("failed to get recent blockhash") from err
-
-                # msg = f"ERROR: Encountered exception while attempting to send transaction: {e}"
-                # raise(e)
-            # Pull byte array from initial transaction
-            tx_payload = list(tx.serialize())
-            if "error" not in response:
-                return json.dumps(
-                    {
-                        'status': HTTPStatus.OK,
-                        'contract': str(mint_account.public_key()),
-                        'msg': f"Successfully minted {str(mint_account.public_key())}",
-                        'tx': tx_payload,
-                        'response': response.get('result'),
-                    }
-                )
-            else:
-                return json.dumps(
-                    {
-                        'status': HTTPStatus.BAD_REQUEST,
-                        'contract': str(mint_account.public_key()),
-                        'response': response,
-                        'tx': tx_payload,
-                    }
-                )
-        except:
-            return json.dumps(
-                {
-                    'status': HTTPStatus.BAD_REQUEST,
-                    'msg': msg,
-                }
-            ) 
-         
-    
     def deploy(self, network, contract, name, symbol):
         """
         Deploy a contract to the blockchain (on networks that support contracts). Takes the network ID and contract name, plus initialisers of name and symbol. Process may vary significantly between blockchains.
@@ -139,19 +46,16 @@ class MetaplexAPI():
             tx = Transaction()
             source_account = Account(self.private_key)
             mint_account = Account()
-            token_account = PublicKey(contract)
-
+            token_account = TOKEN_PROGRAM_ID 
             signers = [source_account, mint_account]
-
-
             try:
                 min_rent_reseponse = client.get_minimum_balance_for_rent_exemption(MINT_LAYOUT.sizeof())
                 lamports = min_rent_reseponse["result"]
             except Exception as e:
-                msg = "ERROR: `amount` must be an int"
+                msg = "ERROR: Failed to receive min balance for rent exemption"
                 raise(e)
 
-            # Generate transaction
+            # Generate Mint 
             create_mint_account_ix = create_account(
                 CreateAccountParams(
                     from_pubkey=source_account.public_key(),
@@ -162,28 +66,18 @@ class MetaplexAPI():
                 )
             )
             tx = tx.add(create_mint_account_ix)
-            initialize_mint_params = InitializeMintParams(
-                decimals=0,
-                program_id=token_account,
-                mint=mint_account.public_key(),
-                mint_authority=source_account.public_key(),
-                freeze_authority=source_account.public_key(),
+            initialize_mint_ix = initialize_mint(
+                InitializeMintParams(
+                    decimals=0,
+                    program_id=token_account,
+                    mint=mint_account.public_key(),
+                    mint_authority=source_account.public_key(),
+                    freeze_authority=source_account.public_key(),
+                )
             )
-            initialize_mint_ix = initialize_mint(initialize_mint_params)
             tx = tx.add(initialize_mint_ix)
 
-            recipient_key = PublicKey.find_program_address(
-                [bytes(source_account.public_key()), bytes(contract), bytes(mint_account.public_key())],
-                ASSOCIATED_TOKEN_ACCOUNT_PROGRAM_ID,
-            )[0]
-            associated_token_account_ix = create_associated_token_account_instruction(
-                associated_token_account=recipient_key,
-                payer=source_account.public_key(),
-                wallet_address=source_account.public_key(),
-                token_mint_address=mint_account.public_key(),
-            )
-            tx = tx.add(associated_token_account_ix)        
-
+            # Create Token Metadata
             create_metadata_ix = create_metadata_instruction(
                 data=create_metadata_instruction_data(name, symbol, [str(source_account.public_key())]),
                 update_authority=source_account.public_key(),
@@ -208,8 +102,7 @@ class MetaplexAPI():
                         'status': HTTPStatus.OK,
                         'contract': str(mint_account.public_key()),
                         'msg': f"Successfully minted {str(mint_account.public_key())}",
-                        'tx': tx_payload,
-                        'response': response.get('result'),
+                        'tx': response.get('result'),
                     }
                 )
             else:
@@ -218,7 +111,7 @@ class MetaplexAPI():
                         'status': HTTPStatus.BAD_REQUEST,
                         'contract': str(mint_account.public_key()),
                         'response': response,
-                        'tx': tx_payload,
+                        'tx_payload': tx_payload,
                     }
                 )
         except Exception as e:
@@ -241,7 +134,7 @@ class MetaplexAPI():
             }
         )
 
-    def topup(self, network, to, amount):
+    def topup(self, network, to, amount=None):
         """
         Send a small amount of native currency to the specified wallet to handle gas fees. Return a status flag of success or fail and the native transaction data.
         """
@@ -258,7 +151,11 @@ class MetaplexAPI():
             signers = [sender]
             # Validate amount 
             try:
-                lamports = int(amount)
+                if amount is None:
+                    min_rent_reseponse = client.get_minimum_balance_for_rent_exemption(ACCOUNT_LAYOUT.sizeof())
+                    lamports = min_rent_reseponse["result"]
+                else:
+                    lamports = int(amount)
             except Exception as e:
                 msg = "ERROR: `amount` must be an int"
                 raise(e)
@@ -279,8 +176,8 @@ class MetaplexAPI():
                     {
                         'status': HTTPStatus.OK,
                         'msg': f"Successfully sent {amount * 1e-9} SOL to {to}",
-                        'tx': tx_payload,
-                        'response': response.get('result'),
+                        'tx': response.get('result'),
+                        'tx_payload': tx_payload,
                     }
                 )
             else:
@@ -288,7 +185,7 @@ class MetaplexAPI():
                     {
                         'status': HTTPStatus.BAD_REQUEST,
                         'response': response,
-                        'tx': tx_payload,
+                        'tx_payload': tx_payload,
                     }
                 )
         except Exception as e:
@@ -314,17 +211,39 @@ class MetaplexAPI():
         msg = ""
         try:
             client = Client(network)
-            signers = [Account(self.private_key)]
-            mint_to_params = MintToParams(
-                program_id=TOKEN_PROGRAM_ID,
-                mint=PublicKey(contract),
-                dest=PublicKey(address),
-                mint_authority=PublicKey(self.public_key),
-                amount=1,
-                signers=signers,
+            source_account = Account(self.private_key)
+            mint_account = PublicKey(contract)
+            user_account = PublicKey(address)
+            token_account = TOKEN_PROGRAM_ID
+            signers = [source_account]
+            tx = Transaction()
+
+            # Create Associated Token Account
+            recipient_key = PublicKey.find_program_address(
+                [bytes(user_account), bytes(token_account), bytes(mint_account)],
+                ASSOCIATED_TOKEN_ACCOUNT_PROGRAM_ID,
+            )[0]
+            associated_token_account_ix = create_associated_token_account_instruction(
+                associated_token_account=recipient_key,
+                payer=source_account.public_key(),
+                wallet_address=user_account,
+                token_mint_address=mint_account,
             )
-            ix = mint_to(mint_to_params)
-            tx = Transaction().add(ix) 
+            tx = tx.add(associated_token_account_ix)        
+
+            # Mint NFT to the newly create associated token account
+            mint_to_ix = mint_to(
+                MintToParams(
+                    program_id=TOKEN_PROGRAM_ID,
+                    mint=mint_account,
+                    dest=recipient_key,
+                    mint_authority=source_account.public_key(),
+                    amount=1,
+                    signers=[source_account.public_key()],
+                )
+            )
+            tx = tx.add(mint_to_ix) 
+
             try:
                 response = client.send_transaction(tx, *signers)
             except Exception as e:
@@ -335,9 +254,9 @@ class MetaplexAPI():
                 return json.dumps(
                     {
                         'status': HTTPStatus.OK,
-                        'msg': f"Successfully minted 1 token to {address}",
-                        'response': response.get('result'),
-                        'tx': tx_payload,
+                        'msg': f"Successfully minted 1 token to {recipient_key}",
+                        'tx': response.get('result'),
+                        'tx_payload': tx_payload,
                     }
                 )
             else:
@@ -345,7 +264,7 @@ class MetaplexAPI():
                     {
                         'status': HTTPStatus.BAD_REQUEST,
                         'response': response,
-                        'tx': tx_payload,
+                        'tx_payload': tx_payload,
                     }
                 )
         except:
@@ -390,9 +309,9 @@ class MetaplexAPI():
                 return json.dumps(
                     {
                         'status': HTTPStatus.OK,
-                        'msg': f"Successfully burned token",
-                        'tx': tx_payload,
-                        'response': response.get('result'),
+                        'msg': f"Successfully transfered token from {sender} to {to}",
+                        'tx': response.get('result'),
+                        'tx_payload': tx_payload,
                     }
                 )
             else:
@@ -400,7 +319,7 @@ class MetaplexAPI():
                     {
                         'status': HTTPStatus.BAD_REQUEST,
                         'response': response,
-                        'payload': tx_payload,
+                        'tx_payload': tx_payload,
                     }
                 )
         except Exception as e:
@@ -421,7 +340,7 @@ class MetaplexAPI():
         try:
             client = Client(network)
             private_key = self.cipher.decrypt(encrypted_private_key).decode('ascii')
-            signers = [Account(self.private_key) ,Account(private_key)]
+            signers = [Account(self.private_key), Account(private_key)]
             # TODO: Verify these params
             burn_params = BurnParams(
                 program_id=TOKEN_PROGRAM_ID,
@@ -446,8 +365,8 @@ class MetaplexAPI():
                     {
                         'status': HTTPStatus.OK,
                         'msg': f"Successfully burned token",
-                        'tx': tx_payload,
-                        'response': response.get('result'),
+                        'tx': response.get('result'),
+                        'tx_payload': tx_payload,
                     }
                 )
             else:
@@ -455,7 +374,7 @@ class MetaplexAPI():
                     {
                         'status': HTTPStatus.BAD_REQUEST,
                         'response': response,
-                        'payload': tx_payload,
+                        'tx_payload': tx_payload,
                     }
                 )
         except Exception as e:

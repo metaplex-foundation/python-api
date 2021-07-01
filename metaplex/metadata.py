@@ -1,13 +1,9 @@
-from itertools import chain
 import struct
 from enum import IntEnum
-from construct import (
-    BitStruct, BitsInteger, BitsSwapped, Bytes, Const, Flag, Int8ul, Int16ul, Int32ul, Int64ul, Padding, Switch
-)
+from construct import Bytes, Flag, Int8ul
 from construct import Struct as cStruct  # type: ignore
 from solana.publickey import PublicKey
 from solana.transaction import AccountMeta, TransactionInstruction
-from collections import namedtuple
 import base58
 
 MAX_NAME_LENGTH = 32
@@ -16,7 +12,6 @@ MAX_URI_LENGTH = 200
 MAX_CREATOR_LENGTH = 34
 MAX_CREATOR_LIMIT = 5
 class InstructionType(IntEnum):
-    """Token instruction types."""
     CREATE_METADATA = 0
 
 METADATA_PROGRAM_ID = PublicKey('metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s')
@@ -37,7 +32,7 @@ def create_associated_token_account_instruction(associated_token_account, payer,
     ]
     return TransactionInstruction(keys=keys, program_id=ASSOCIATED_TOKEN_ACCOUNT_PROGRAM_ID)
 
-def _get_data_buffer(name, symbol, uri, creators):
+def _get_data_buffer(name, symbol, uri, creators, verified=1, share=100):
     args =  [
         len(name),
         *list(name.encode()),
@@ -60,8 +55,8 @@ def _get_data_buffer(name, symbol, uri, creators):
         for creator in creators: 
             byte_fmt +=  "B"*32 + "B" + "B"
             args.extend(list(base58.b58decode(creator)))
-            args.append(1) # verified = True
-            args.append(100) # share = 100
+            args.append(verified) # verified = True
+            args.append(share) # share = 100
     else:
         args.append(0) 
     buffer = struct.pack(byte_fmt, *args)
