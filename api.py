@@ -155,7 +155,7 @@ class MetaplexAPI():
                 else:
                     lamports = int(amount)
             except Exception as e:
-                msg = "ERROR: `amount` must be an int"
+                msg = "ERROR: couldn't process lamports" 
                 raise(e)
             # Generate transaction
             transfer_ix = transfer(TransferParams(from_pubkey=sender_account.public_key(), to_pubkey=dest_account, lamports=lamports))
