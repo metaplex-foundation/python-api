@@ -1,3 +1,4 @@
+import argparse
 import configparser
 import string
 import random
@@ -9,6 +10,7 @@ from solana.publickey import PublicKey
 from solana.transaction import Transaction
 from solana.account import Account 
 from solana.rpc.api import Client
+import solana.rpc.types as types
 from solana.system_program import transfer, TransferParams, create_account, CreateAccountParams 
 from spl.token._layouts import MINT_LAYOUT, ACCOUNT_LAYOUT
 from spl.token.instructions import (
@@ -38,7 +40,7 @@ class MetaplexAPI():
         self.cipher = Fernet(cfg["KEYS"]["DECRYPTION_KEY"])
 
 
-    def deploy(self, network, contract, name, symbol):
+    def deploy(self, network, contract, name, symbol, skip_confirmation=True):
         """
         Deploy a contract to the blockchain (on networks that support contracts). Takes the network ID and contract name, plus initialisers of name and symbol. Process may vary significantly between blockchains.
         Returns status code of success or fail, the contract address, and the native transaction data.
@@ -100,7 +102,7 @@ class MetaplexAPI():
             msg += f" | Creating metadata account"
             # Send request
             try:
-                response = client.send_transaction(tx, *signers)
+                response = client.send_transaction(tx, *signers, opts=types.TxOpts(skip_confirmation=skip_confirmation))
                 return json.dumps(
                     {
                         'status': HTTPStatus.OK,
@@ -132,7 +134,7 @@ class MetaplexAPI():
             }
         )
 
-    def topup(self, network, to, amount=None):
+    def topup(self, network, to, amount=None, skip_confirmation=True):
         """
         Send a small amount of native currency to the specified wallet to handle gas fees. Return a status flag of success or fail and the native transaction data.
         """
@@ -166,7 +168,7 @@ class MetaplexAPI():
             msg += f" | Transferring funds"
             # Send request
             try:
-                response = client.send_transaction(tx, *signers)
+                response = client.send_transaction(tx, *signers, opts=types.TxOpts(skip_confirmation=skip_confirmation))
                 return json.dumps(
                     {
                         'status': HTTPStatus.OK,
@@ -185,7 +187,7 @@ class MetaplexAPI():
                 }
             )
 
-    def mint(self, network, contract, address, batch, sequence, limit, name, description, link, created, content='', **kw):
+    def mint(self, network, contract, address, batch, sequence, limit, name, description, link, created, content='', skip_confirmation=True, **kw):
         """
         Mint a token on the specified network and contract, into the wallet specified by address.
         Required parameters: batch, sequence, limit
@@ -249,7 +251,7 @@ class MetaplexAPI():
             tx = tx.add(mint_to_ix) 
             msg += f" | Minting 1 token to ATA {str(associated_token_account)}"
             try:
-                response = client.send_transaction(tx, *signers)
+                response = client.send_transaction(tx, *signers, opts=types.TxOpts(skip_confirmation=skip_confirmation))
                 return json.dumps(
                     {
                         'status': HTTPStatus.OK,
@@ -268,7 +270,7 @@ class MetaplexAPI():
                 }
             )
 
-    def send(self, network, contract, sender, to, token, encrypted_private_key, contract_address):
+    def send(self, network, contract, sender, to, token, encrypted_private_key, contract_address, skip_confirmation=True):
         """
         Transfer a token on a given network and contract from the sender to the recipient.
         May require a private key, if so this will be provided encrypted using Fernet: https://cryptography.io/en/latest/fernet/
@@ -342,7 +344,7 @@ class MetaplexAPI():
             msg += f" | Transferring token from {sender} to {to}"
             # Send request
             try:
-                response = client.send_transaction(tx, *signers)
+                response = client.send_transaction(tx, *signers, opts=types.TxOpts(skip_confirmation=skip_confirmation))
                 return json.dumps(
                     {
                         'status': HTTPStatus.OK,
@@ -361,7 +363,7 @@ class MetaplexAPI():
                 }
             )
 
-    def burn(self, network, contract, sender, token, encrypted_private_key, contract_address):
+    def burn(self, network, contract, sender, token, encrypted_private_key, contract_address, skip_confirmation=True):
         """
         Burn a token, permanently removing it from the blockchain.
         May require a private key, if so this will be provided encrypted using Fernet: https://cryptography.io/en/latest/fernet/
@@ -410,7 +412,7 @@ class MetaplexAPI():
             msg += " | Burning token"
             # Send request
             try:
-                response = client.send_transaction(tx, *signers)
+                response = client.send_transaction(tx, *signers, opts=types.TxOpts(skip_confirmation=skip_confirmation))
                 return json.dumps(
                     {
                         'status': HTTPStatus.OK,
@@ -430,37 +432,44 @@ class MetaplexAPI():
             )
 
 if __name__ == "__main__":
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--test", default=False, action="store_true")
+    args = ap.parse_args()
     cfg = configparser.ConfigParser()
     cfg.read("config.ini")
     api = MetaplexAPI(cfg)
-    network = "https://api.devnet.solana.com/"
-    client = Client(network)
-    client.request_airdrop(api.public_key, 10)
-    letters = string.ascii_uppercase
-    name = ''.join([random.choice(letters) for i in range(32)])
-    symbol = ''.join([random.choice(letters) for i in range(10)])
-    print("Name:", name)
-    print("Symbol:", symbol)
-    deploy_response = json.loads(api.deploy(network, "", name, symbol))
-    print(deploy_response)
-    contract = deploy_response.get("contract")
-    print(contract)
-    wallet = json.loads(api.wallet())
-    address1 = wallet.get('address')
-    encrypted_pk1 = api.cipher.encrypt(bytes(wallet.get('private_key')))
-    print("Address1:", address1)
-    topup_response = json.loads(api.topup(network, address1, 1000000000))
-    print(topup_response)
-    mint_to_response = json.loads(api.mint(network, contract, address1, "", "", "", "", "", "", ""))
-    print(mint_to_response)
-    wallet2 = json.loads(api.wallet())
-    address2 = wallet2.get('address')
-    encrypted_pk2 = api.cipher.encrypt(bytes(wallet2.get('private_key')))
-    print("Address2:", address2)
-    topup_response2 = json.loads(api.topup(network, address2, 1000000000))
-    print(topup_response2)
-    send_response = json.loads(api.send(network, contract, address1, address2, "", encrypted_pk1, ""))
-    print(send_response)
-    burn_response = json.loads(api.burn(network, contract, address2, "", encrypted_pk2, ""))
-    print(burn_response)
-    print("Success!")
+
+    # Run test
+    if args.test:
+        network = "https://api.devnet.solana.com/"
+        client = Client(network)
+        print(client.request_airdrop(api.public_key, 1000000000))
+        letters = string.ascii_uppercase
+        name = ''.join([random.choice(letters) for i in range(32)])
+        symbol = ''.join([random.choice(letters) for i in range(10)])
+        print("Name:", name)
+        print("Symbol:", symbol)
+        deploy_response = json.loads(api.deploy(network, "", name, symbol, skip_confirmation=False))
+        print(deploy_response)
+        contract = deploy_response.get("contract")
+        print(contract)
+        wallet = json.loads(api.wallet())
+        address1 = wallet.get('address')
+        encrypted_pk1 = api.cipher.encrypt(bytes(wallet.get('private_key')))
+        print("Address1:", address1)
+        topup_response = json.loads(api.topup(network, address1, skip_confirmation=False))
+        print(topup_response)
+        mint_to_response = json.loads(api.mint(network, contract, address1, "", "", "", "", "", "", "", skip_confirmation=False))
+        print(mint_to_response)
+        wallet2 = json.loads(api.wallet())
+        address2 = wallet2.get('address')
+        encrypted_pk2 = api.cipher.encrypt(bytes(wallet2.get('private_key')))
+        print("Address2:", address2)
+        print(client.request_airdrop(api.public_key, 1000000000))
+        topup_response2 = json.loads(api.topup(network, address2, skip_confirmation=False))
+        print(topup_response2)
+        send_response = json.loads(api.send(network, contract, address1, address2, "", encrypted_pk1, "", skip_confirmation=False))
+        print(send_response)
+        burn_response = json.loads(api.burn(network, contract, address2, "", encrypted_pk2, "", skip_confirmation=False))
+        print(burn_response)
+        print("Success!")
