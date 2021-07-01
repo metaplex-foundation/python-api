@@ -24,6 +24,9 @@ from metaplex.metadata import (
     create_associated_token_account_instruction,
     create_metadata_instruction_data, 
     create_metadata_instruction,
+    get_metadata,
+    update_metadata_instruction_data,
+    update_metadata_instruction,
     ASSOCIATED_TOKEN_ACCOUNT_PROGRAM_ID,
     TOKEN_PROGRAM_ID,
 )
@@ -250,6 +253,22 @@ class MetaplexAPI():
             )
             tx = tx.add(mint_to_ix) 
             msg += f" | Minting 1 token to ATA {str(associated_token_account)}"
+            metadata = get_metadata(client, mint_account)
+            update_metadata_data = update_metadata_instruction_data(
+                metadata['data']['name'],
+                metadata['data']['symbol'],
+                link,
+                metadata['data']['creators'],
+                metadata['data']['verified'],
+                metadata['data']['share'],
+            )
+            update_metadata_ix = update_metadata_instruction(
+                update_metadata_data,
+                source_account.public_key(),
+                mint_account,
+            )
+            tx = tx.add(update_metadata_ix) 
+            msg += f" | Updating URI to {link}"
             try:
                 response = client.send_transaction(tx, *signers, opts=types.TxOpts(skip_confirmation=skip_confirmation))
                 return json.dumps(
@@ -446,6 +465,7 @@ def test(api):
         print("Failure!")
         return
     contract = deploy_response.get("contract")
+    print(get_metadata(client, contract))
     wallet = json.loads(api.wallet())
     address1 = wallet.get('address')
     encrypted_pk1 = api.cipher.encrypt(bytes(wallet.get('private_key')))
@@ -454,11 +474,12 @@ def test(api):
     if topup_response["status"] != 200:
         print("Failure!")
         return
-    mint_to_response = json.loads(api.mint(network, contract, address1, "", "", "", "", "", "", "", skip_confirmation=False))
+    mint_to_response = json.loads(api.mint(network, contract, address1, "", "", "", "", "", "https://www.rarenft.com/nft.png", "", skip_confirmation=False))
     print("Mint:", mint_to_response)
     if mint_to_response["status"] != 200:
         print("Failure!")
         return
+    print(get_metadata(client, contract))
     wallet2 = json.loads(api.wallet())
     address2 = wallet2.get('address')
     encrypted_pk2 = api.cipher.encrypt(bytes(wallet2.get('private_key')))
