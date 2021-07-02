@@ -192,3 +192,37 @@ Args:
 >>> 
 ```
 https://explorer.solana.com/tx/5kd5g4mNBSjoTVYwAasWZx6iB8ijaELfBukKrNYBeDvLomK7iTqFH1R29yniEGcfajakDxsqmYCDgDvukihRyZeZ?cluster=devnet
+
+### Full Example Code:
+
+This is the sequential code from the previous section. These accounts will need to change if you want to do your own test.
+```
+account = Account()
+cfg = {"PRIVATE_KEY": base58.b58encode(account.secret_key()).decode("ascii"), "PUBLIC_KEY": str(account.public_key()), "DECRYPTION_KEY": Fernet.generate_key().decode("ascii")}
+api_endpoint = "https://api.devnet.solana.com/"
+Client(api_endpoint).request_airdrop(account.public_key(), int(1e10))
+
+# Create API
+metaplex_api = MetaplexAPI(cfg)
+
+# Deploy
+metaplex_api.deploy(api_endpoint, "A"*32, "A"*10)
+
+# Topup VtdBygLSt1EJF5M3nUk5CRxuNNTyZFUsKJ4yUVcC6hh
+metaplex_api.topup(api_endpoint, "VtdBygLSt1EJF5M3nUk5CRxuNNTyZFUsKJ4yUVcC6hh")
+
+# Mint
+metaplex_api.mint(api_endpoint, "7bxe7t1aGdum8o97bkuFeeBTcbARaBn9Gbv5sBd9DZPG", "VtdBygLSt1EJF5M3nUk5CRxuNNTyZFUsKJ4yUVcC6hh", "https://arweave.net/1eH7bZS-6HZH4YOc8T_tGp2Rq25dlhclXJkoa6U55mM/")
+
+# Topup EnMb6ZntX43PFeX2NLcV4dtLhqsxF9hUr3tgF1Cwpwu8
+metaplex_api.topup(api_endpoint, "EnMb6ZntX43PFeX2NLcV4dtLhqsxF9hUr3tgF1Cwpwu8")
+
+# Send
+encrypted_key = metaplex_api.cipher.encrypt(bytes([95, 46, 174, 145, 248, 101, 108, 111, 128, 44, 41, 212, 118, 145, 42, 242, 84, 6, 31, 115, 18, 126, 47, 230, 103, 202, 46, 7, 194, 149, 42, 213]))
+metaplex_api.send(api_endpoint, "7bxe7t1aGdum8o97bkuFeeBTcbARaBn9Gbv5sBd9DZPG", "VtdBygLSt1EJF5M3nUk5CRxuNNTyZFUsKJ4yUVcC6hh", "EnMb6ZntX43PFeX2NLcV4dtLhqsxF9hUr3tgF1Cwpwu8", encrypted_key)
+
+# Burn
+encrypted_key = metaplex_api.cipher.encrypt(bytes([172, 155, 209, 75, 226, 68, 91, 22, 199, 75, 148, 197, 143, 10, 211, 67, 5, 160, 101, 15, 139, 33, 208, 65, 59, 198, 5, 41, 167, 206, 85, 83]))
+metaplex_api.burn(api_endpoint, "7bxe7t1aGdum8o97bkuFeeBTcbARaBn9Gbv5sBd9DZPG", "EnMb6ZntX43PFeX2NLcV4dtLhqsxF9hUr3tgF1Cwpwu8", encrypted_key)
+ 
+```
