@@ -53,6 +53,12 @@ This section will go through the following story (if you look at the code snippe
 8) `B` transfers `N` to `C`
 9) `C` destroys `N` 
 
+Let's get started:
+```
+$ python -i api/metaplex_api.py
+>>> 
+```
+
 ### deploy
 `deploy` will create a new NFT token by
 1) Creating a new account from randomly generated address (invokes `CreateAccount` from the System Program)
