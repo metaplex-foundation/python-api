@@ -184,7 +184,7 @@ class MetaplexAPI():
                 }
             )
 
-    def mint(self, api_endpoint, contract_key, dest_address_key, link, skip_confirmation=True):
+    def mint(self, api_endpoint, contract_key, dest_key, link, skip_confirmation=True):
         """
         Mint a token on the specified network and contract, into the wallet specified by address.
         Required parameters: batch, sequence, limit
@@ -204,7 +204,7 @@ class MetaplexAPI():
             # List non-derived accounts
             source_account = Account(self.private_key)
             mint_account = PublicKey(contract_key)
-            user_account = PublicKey(dest_address_key)
+            user_account = PublicKey(dest_key)
             token_account = TOKEN_PROGRAM_ID
             msg += " | Gathered accounts"
             # List signers
@@ -283,7 +283,7 @@ class MetaplexAPI():
                 }
             )
 
-    def send(self, api_endpoint, contract, sender, to, encrypted_private_key, skip_confirmation=True):
+    def send(self, api_endpoint, contract_key, sender_key, dest_key, encrypted_private_key, skip_confirmation=True):
         """
         Transfer a token on a given network and contract from the sender to the recipient.
         May require a private key, if so this will be provided encrypted using Fernet: https://cryptography.io/en/latest/fernet/
@@ -301,10 +301,10 @@ class MetaplexAPI():
             # List non-derived accounts
             source_account = Account(self.private_key)
             owner_account = Account(private_key) # Owner of contract 
-            sender_account = PublicKey(sender) # Public key of `owner_account`
+            sender_account = PublicKey(sender_key) # Public key of `owner_account`
             token_account = TOKEN_PROGRAM_ID
-            mint_account = PublicKey(contract)
-            dest_account = PublicKey(to)
+            mint_account = PublicKey(contract_key)
+            dest_account = PublicKey(dest_key)
             msg += " | Gathered accounts"
             # This is a very rare care, but in the off chance that the source wallet is the recipient of a transfer we don't need a list of 2 keys
             if private_key == self.private_key:
@@ -319,7 +319,7 @@ class MetaplexAPI():
                 ASSOCIATED_TOKEN_ACCOUNT_PROGRAM_ID,
             )[0]
             if client.get_account_info(token_pda_address)['result']['value'] is None: 
-                msg += f" | Associated token account for {contract} does not exist for {str(sender_account)}"
+                msg += f" | Associated token account for {contract_key} does not exist for {str(sender_account)}"
                 raise Exception
             msg += " | Found sender PDA"
             # Check if PDA is initialized for receiver. If not, create the account
@@ -354,14 +354,14 @@ class MetaplexAPI():
                 )
             )
             tx = tx.add(spl_transfer_ix)
-            msg += f" | Transferring token from {sender} to {to}"
+            msg += f" | Transferring token from {sender_key} to {dest_key}"
             # Send request
             try:
                 response = client.send_transaction(tx, *signers, opts=types.TxOpts(skip_confirmation=skip_confirmation))
                 return json.dumps(
                     {
                         'status': HTTPStatus.OK,
-                        'msg': f"Successfully transfered token from {sender} to {to}",
+                        'msg': f"Successfully transfered token from {sender_key} to {dest_key}",
                         'tx': response.get('result') if skip_confirmation else response['result']['transaction']['signatures'],
                     }
                 )
@@ -376,7 +376,7 @@ class MetaplexAPI():
                 }
             )
 
-    def burn(self, api_endpoint, contract, sender, encrypted_private_key, skip_confirmation=True):
+    def burn(self, api_endpoint, contract_key, owner_key, encrypted_private_key, skip_confirmation=True):
         """
         Burn a token, permanently removing it from the blockchain.
         May require a private key, if so this will be provided encrypted using Fernet: https://cryptography.io/en/latest/fernet/
@@ -392,22 +392,21 @@ class MetaplexAPI():
             assert(len(private_key) == 32)
             msg += " | Decoded private key"
             # List accounts
-            owner_account = Account(private_key) # Owner of contract 
-            sender_account = PublicKey(sender) # Public key of `owner_account` 
+            owner_account = PublicKey(owner_key)
             token_account = TOKEN_PROGRAM_ID
-            mint_account = PublicKey(contract)
+            mint_account = PublicKey(contract_key)
             msg += " | Gathered accounts"
             # List signers
-            signers = [owner_account]
+            signers = [Account(private_key)]
             # Start transaction
             tx = Transaction()
             # Find PDA for sender
             token_pda_address = PublicKey.find_program_address(
-                [bytes(sender_account), bytes(token_account), bytes(mint_account)],
+                [bytes(owner_account), bytes(token_account), bytes(mint_account)],
                 ASSOCIATED_TOKEN_ACCOUNT_PROGRAM_ID,
             )[0]
             if client.get_account_info(token_pda_address)['result']['value'] is None: 
-                msg += f" | Associated token account for {contract} does not exist for {str(sender_account)}"
+                msg += f" | Associated token account for {contract_key} does not exist for {str(owner_account)}"
                 raise Exception
             msg += " | Found token PDA"
             # Burn token
@@ -416,7 +415,7 @@ class MetaplexAPI():
                     program_id=token_account,
                     account=token_pda_address,
                     mint=mint_account,
-                    owner=sender_account,
+                    owner=owner_account,
                     amount=1,
                     signers=[],
                 )
@@ -429,7 +428,7 @@ class MetaplexAPI():
                 return json.dumps(
                     {
                         'status': HTTPStatus.OK,
-                        'msg': f"Successfully burned token {str(mint_account)} on {str(sender_account)}",
+                        'msg': f"Successfully burned token {str(mint_account)} on {str(owner_account)}",
                         'tx': response.get('result') if skip_confirmation else response['result']['transaction']['signatures'],
                     }
                 )
