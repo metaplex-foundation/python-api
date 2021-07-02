@@ -1,10 +1,8 @@
-import argparse
-import configparser
-import string
-import random
 import json
 from http import HTTPStatus
 from cryptography.fernet import Fernet
+import base64
+import base58
 
 from solana.publickey import PublicKey 
 from solana.transaction import Transaction
@@ -31,27 +29,23 @@ from metaplex.metadata import (
     TOKEN_PROGRAM_ID,
 )
 
-import base64
-import base58
-
 
 class MetaplexAPI():
 
     def __init__(self, cfg):
-        self.private_key = list(base58.b58decode(cfg["KEYS"]["PRIVATE_KEY"]))[:32]
-        self.public_key = cfg["KEYS"]["PUBLIC_KEY"]
-        self.cipher = Fernet(cfg["KEYS"]["DECRYPTION_KEY"])
+        self.private_key = list(base58.b58decode(cfg["PRIVATE_KEY"]))[:32]
+        self.public_key = cfg["PUBLIC_KEY"]
+        self.cipher = Fernet(cfg["DECRYPTION_KEY"])
 
-
-    def deploy(self, network, contract, name, symbol, skip_confirmation=True):
+    def deploy(self, api_endpoint, name, symbol, skip_confirmation=True):
         """
-        Deploy a contract to the blockchain (on networks that support contracts). Takes the network ID and contract name, plus initialisers of name and symbol. Process may vary significantly between blockchains.
+        Deploy a contract to the blockchain (on network that support contracts). Takes the network ID and contract name, plus initialisers of name and symbol. Process may vary significantly between blockchains.
         Returns status code of success or fail, the contract address, and the native transaction data.
         """
         msg = ""
         try:
             # Initalize Clinet
-            client = Client(network)
+            client = Client(api_endpoint)
             msg += "Initialized client"
             # List non-derived accounts
             source_account = Account(self.private_key)
@@ -126,7 +120,7 @@ class MetaplexAPI():
             )    
 
     def wallet(self):
-        """ Generate a wallet on the specified network and return the address and private key. """
+        """ Generate a wallet and return the address and private key. """
         account = Account()
         pub_key = account.public_key() 
         private_key = list(account.secret_key()[:32])
@@ -137,14 +131,14 @@ class MetaplexAPI():
             }
         )
 
-    def topup(self, network, to, amount=None, skip_confirmation=True):
+    def topup(self, api_endpoint, to, amount=None, skip_confirmation=True):
         """
         Send a small amount of native currency to the specified wallet to handle gas fees. Return a status flag of success or fail and the native transaction data.
         """
         msg = ""
         try:
-            # Connect to the network
-            client = Client(network)
+            # Connect to the api_endpoint
+            client = Client(api_endpoint)
             msg += "Initialized client"
             # List accounts 
             sender_account = Account(self.private_key)
@@ -190,7 +184,7 @@ class MetaplexAPI():
                 }
             )
 
-    def mint(self, network, contract, address, batch, sequence, limit, name, description, link, created, content='', skip_confirmation=True, **kw):
+    def mint(self, api_endpoint, contract_key, dest_address_key, link, skip_confirmation=True):
         """
         Mint a token on the specified network and contract, into the wallet specified by address.
         Required parameters: batch, sequence, limit
@@ -205,12 +199,12 @@ class MetaplexAPI():
         msg = ""
         try:
             # Initialize Client
-            client = Client(network)
+            client = Client(api_endpoint)
             msg += "Initialized client"
             # List non-derived accounts
             source_account = Account(self.private_key)
-            mint_account = PublicKey(contract)
-            user_account = PublicKey(address)
+            mint_account = PublicKey(contract_key)
+            user_account = PublicKey(dest_address_key)
             token_account = TOKEN_PROGRAM_ID
             msg += " | Gathered accounts"
             # List signers
@@ -289,7 +283,7 @@ class MetaplexAPI():
                 }
             )
 
-    def send(self, network, contract, sender, to, token, encrypted_private_key, contract_address, skip_confirmation=True):
+    def send(self, api_endpoint, contract, sender, to, encrypted_private_key, skip_confirmation=True):
         """
         Transfer a token on a given network and contract from the sender to the recipient.
         May require a private key, if so this will be provided encrypted using Fernet: https://cryptography.io/en/latest/fernet/
@@ -298,7 +292,7 @@ class MetaplexAPI():
         msg = ""
         try:
             # Initialize Client
-            client = Client(network)
+            client = Client(api_endpoint)
             msg += "Initialized client"
             # Decrypt the private key
             private_key = list(self.cipher.decrypt(encrypted_private_key))
@@ -382,7 +376,7 @@ class MetaplexAPI():
                 }
             )
 
-    def burn(self, network, contract, sender, token, encrypted_private_key, contract_address, skip_confirmation=True):
+    def burn(self, api_endpoint, contract, sender, encrypted_private_key, skip_confirmation=True):
         """
         Burn a token, permanently removing it from the blockchain.
         May require a private key, if so this will be provided encrypted using Fernet: https://cryptography.io/en/latest/fernet/
@@ -391,7 +385,7 @@ class MetaplexAPI():
         msg = ""
         try:
             # Initialize Client
-            client = Client(network)
+            client = Client(api_endpoint)
             msg += "Initialized client"
             # Decrypt the private key
             private_key = list(self.cipher.decrypt(encrypted_private_key))
@@ -449,67 +443,3 @@ class MetaplexAPI():
                     'msg': msg,
                 }
             )
-
-def test(api):
-    network = "https://api.devnet.solana.com/"
-    client = Client(network)
-    client.request_airdrop(api.public_key, 1000000000)
-    letters = string.ascii_uppercase
-    name = ''.join([random.choice(letters) for i in range(32)])
-    symbol = ''.join([random.choice(letters) for i in range(10)])
-    print("Name:", name)
-    print("Symbol:", symbol)
-    deploy_response = json.loads(api.deploy(network, "", name, symbol, skip_confirmation=False))
-    print("Deploy:", deploy_response)
-    if deploy_response["status"] != 200:
-        print("Failure!")
-        return
-    contract = deploy_response.get("contract")
-    print(get_metadata(client, contract))
-    wallet = json.loads(api.wallet())
-    address1 = wallet.get('address')
-    encrypted_pk1 = api.cipher.encrypt(bytes(wallet.get('private_key')))
-    topup_response = json.loads(api.topup(network, address1, skip_confirmation=False))
-    print(f"Topup {address1}:", topup_response)
-    if topup_response["status"] != 200:
-        print("Failure!")
-        return
-    mint_to_response = json.loads(api.mint(network, contract, address1, "", "", "", "", "", "https://arweave.net/1eH7bZS-6HZH4YOc8T_tGp2Rq25dlhclXJkoa6U55mM/", "", skip_confirmation=False))
-    print("Mint:", mint_to_response)
-    if mint_to_response["status"] != 200:
-        print("Failure!")
-        return
-    print(get_metadata(client, contract))
-    wallet2 = json.loads(api.wallet())
-    address2 = wallet2.get('address')
-    encrypted_pk2 = api.cipher.encrypt(bytes(wallet2.get('private_key')))
-    client.request_airdrop(api.public_key, 1000000000)
-    topup_response2 = json.loads(api.topup(network, address2, skip_confirmation=False))
-    print(f"Topup {address2}:", topup_response2)
-    if topup_response2["status"] != 200:
-        print("Failure!")
-        return
-    send_response = json.loads(api.send(network, contract, address1, address2, "", encrypted_pk1, "", skip_confirmation=False))
-    print(f"Transfer:", send_response)
-    if send_response["status"] != 200:
-        print("Failure!")
-        return
-    burn_response = json.loads(api.burn(network, contract, address2, "", encrypted_pk2, "", skip_confirmation=False))
-    print("Burn:", burn_response)
-    if burn_response["status"] != 200:
-        print("Failure!")
-        return
-    print("Success!")
-
-
-if __name__ == "__main__":
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--test", default=False, action="store_true")
-    args = ap.parse_args()
-    cfg = configparser.ConfigParser()
-    cfg.read("config.ini")
-    api = MetaplexAPI(cfg)
-
-    # Run test
-    if args.test:
-        test(api)
