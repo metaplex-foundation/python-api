@@ -55,7 +55,7 @@ This section will go through the following story (if you look at the code snippe
 
 Let's get started:
 ```
-$ python -i api/metaplex_api.py
+$ python -i -m api.metaplex_api
 >>> 
 ```
 
