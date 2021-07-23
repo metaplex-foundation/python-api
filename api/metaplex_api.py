@@ -37,7 +37,7 @@ class MetaplexAPI():
         self.public_key = cfg["PUBLIC_KEY"]
         self.cipher = Fernet(cfg["DECRYPTION_KEY"])
 
-    def deploy(self, api_endpoint, name, symbol, skip_confirmation=True):
+    def deploy(self, api_endpoint, name, symbol, max_retries=3, skip_confirmation=False):
         """
         Deploy a contract to the blockchain (on network that support contracts). Takes the network ID and contract name, plus initialisers of name and symbol. Process may vary significantly between blockchains.
         Returns status code of success or fail, the contract address, and the native transaction data.
@@ -98,19 +98,20 @@ class MetaplexAPI():
             tx = tx.add(create_metadata_ix)
             msg += f" | Creating metadata account"
             # Send request
-            try:
-                response = client.send_transaction(tx, *signers, opts=types.TxOpts(skip_confirmation=skip_confirmation))
-                return json.dumps(
-                    {
-                        'status': HTTPStatus.OK,
-                        'contract': str(mint_account.public_key()),
-                        'msg': f"Successfully created mint {str(mint_account.public_key())}",
-                        'tx': response.get('result') if skip_confirmation else response['result']['transaction']['signatures'],
-                    }
-                )
-            except Exception as e:
-                msg += f" | ERROR: Encountered exception while attempting to send transaction: {e}"
-                raise(e)
+            for retries in range(max_retries):
+                try:
+                    response = client.send_transaction(tx, *signers, opts=types.TxOpts(skip_confirmation=skip_confirmation))
+                    return json.dumps(
+                        {
+                            'status': HTTPStatus.OK,
+                            'contract': str(mint_account.public_key()),
+                            'msg': f"Successfully created mint {str(mint_account.public_key())}",
+                            'tx': response.get('result') if skip_confirmation else response['result']['transaction']['signatures'],
+                        }
+                    )
+                except Exception as e:
+                    msg += f" | ERROR: Encountered exception while attempting to send transaction: {e}, attempt {retries}"
+            raise e
         except Exception as e:
             return json.dumps(
                 {
@@ -131,7 +132,7 @@ class MetaplexAPI():
             }
         )
 
-    def topup(self, api_endpoint, to, amount=None, skip_confirmation=True):
+    def topup(self, api_endpoint, to, amount=None, max_retries=3, skip_confirmation=False):
         """
         Send a small amount of native currency to the specified wallet to handle gas fees. Return a status flag of success or fail and the native transaction data.
         """
@@ -164,18 +165,19 @@ class MetaplexAPI():
             tx = tx.add(transfer_ix)
             msg += f" | Transferring funds"
             # Send request
-            try:
-                response = client.send_transaction(tx, *signers, opts=types.TxOpts(skip_confirmation=skip_confirmation))
-                return json.dumps(
-                    {
-                        'status': HTTPStatus.OK,
-                        'msg': f"Successfully sent {lamports * 1e-9} SOL to {to}",
-                        'tx': response.get('result') if skip_confirmation else response['result']['transaction']['signatures'],
-                    }
-                )
-            except Exception as e:
-                msg += f" | ERROR: Encountered exception while attempting to send transaction: {e}"
-                raise(e)
+            for retries in range(max_retries):
+                try:
+                    response = client.send_transaction(tx, *signers, opts=types.TxOpts(skip_confirmation=skip_confirmation))
+                    return json.dumps(
+                        {
+                            'status': HTTPStatus.OK,
+                            'msg': f"Successfully sent {lamports * 1e-9} SOL to {to}",
+                            'tx': response.get('result') if skip_confirmation else response['result']['transaction']['signatures'],
+                        }
+                    )
+                except Exception as e:
+                    msg += f" | ERROR: Encountered exception while attempting to send transaction: {e}, attempt {retries}"
+            raise e
         except Exception as e:
             return json.dumps(
                 {
@@ -184,7 +186,7 @@ class MetaplexAPI():
                 }
             )
 
-    def mint(self, api_endpoint, contract_key, dest_key, link, skip_confirmation=True):
+    def mint(self, api_endpoint, contract_key, dest_key, link, max_retries=3, skip_confirmation=False):
         """
         Mint a token on the specified network and contract, into the wallet specified by address.
         Required parameters: batch, sequence, limit
@@ -263,18 +265,19 @@ class MetaplexAPI():
             )
             tx = tx.add(update_metadata_ix) 
             msg += f" | Updating URI to {link}"
-            try:
-                response = client.send_transaction(tx, *signers, opts=types.TxOpts(skip_confirmation=skip_confirmation))
-                return json.dumps(
-                    {
-                        'status': HTTPStatus.OK,
-                        'msg': f"Successfully minted 1 token to {associated_token_account}",
-                        'tx': response.get('result') if skip_confirmation else response['result']['transaction']['signatures'],
-                    }
-                )
-            except Exception as e:
-                msg += f" | ERROR: Encountered exception while attempting to send transaction: {e}"
-                raise(e)
+            for retries in range(max_retries):
+                try:
+                    response = client.send_transaction(tx, *signers, opts=types.TxOpts(skip_confirmation=skip_confirmation))
+                    return json.dumps(
+                        {
+                            'status': HTTPStatus.OK,
+                            'msg': f"Successfully minted 1 token to {associated_token_account}",
+                            'tx': response.get('result') if skip_confirmation else response['result']['transaction']['signatures'],
+                        }
+                    )
+                except Exception as e:
+                    msg += f" | ERROR: Encountered exception while attempting to send transaction: {e}, attempt {retries}"
+            raise(e)
         except:
             return json.dumps(
                 {
@@ -283,7 +286,7 @@ class MetaplexAPI():
                 }
             )
 
-    def send(self, api_endpoint, contract_key, sender_key, dest_key, encrypted_private_key, skip_confirmation=True):
+    def send(self, api_endpoint, contract_key, sender_key, dest_key, encrypted_private_key, max_retries=3, skip_confirmation=False):
         """
         Transfer a token on a given network and contract from the sender to the recipient.
         May require a private key, if so this will be provided encrypted using Fernet: https://cryptography.io/en/latest/fernet/
@@ -356,18 +359,20 @@ class MetaplexAPI():
             tx = tx.add(spl_transfer_ix)
             msg += f" | Transferring token from {sender_key} to {dest_key}"
             # Send request
-            try:
-                response = client.send_transaction(tx, *signers, opts=types.TxOpts(skip_confirmation=skip_confirmation))
-                return json.dumps(
-                    {
-                        'status': HTTPStatus.OK,
-                        'msg': f"Successfully transfered token from {sender_key} to {dest_key}",
-                        'tx': response.get('result') if skip_confirmation else response['result']['transaction']['signatures'],
-                    }
-                )
-            except Exception as e:
-                msg += f" | ERROR: Encountered exception while attempting to send transaction: {e}"
-                raise(e)
+            
+            for retries in range(max_retries):
+                try:
+                    response = client.send_transaction(tx, *signers, opts=types.TxOpts(skip_confirmation=skip_confirmation))
+                    return json.dumps(
+                        {
+                            'status': HTTPStatus.OK,
+                            'msg': f"Successfully transfered token from {sender_key} to {dest_key}",
+                            'tx': response.get('result') if skip_confirmation else response['result']['transaction']['signatures'],
+                        }
+                    )
+                except Exception as e:
+                    msg += f" | ERROR: Encountered exception while attempting to send transaction: {e}, attempt {retries}"
+            raise(e)
         except Exception as e:
             return json.dumps(
                 {
@@ -376,7 +381,7 @@ class MetaplexAPI():
                 }
             )
 
-    def burn(self, api_endpoint, contract_key, owner_key, encrypted_private_key, skip_confirmation=True):
+    def burn(self, api_endpoint, contract_key, owner_key, encrypted_private_key, max_retries=3, skip_confirmation=False):
         """
         Burn a token, permanently removing it from the blockchain.
         May require a private key, if so this will be provided encrypted using Fernet: https://cryptography.io/en/latest/fernet/
@@ -423,18 +428,19 @@ class MetaplexAPI():
             tx = tx.add(burn_ix)
             msg += " | Burning token"
             # Send request
-            try:
-                response = client.send_transaction(tx, *signers, opts=types.TxOpts(skip_confirmation=skip_confirmation))
-                return json.dumps(
-                    {
-                        'status': HTTPStatus.OK,
-                        'msg': f"Successfully burned token {str(mint_account)} on {str(owner_account)}",
-                        'tx': response.get('result') if skip_confirmation else response['result']['transaction']['signatures'],
-                    }
-                )
-            except Exception as e:
-                msg += f" | ERROR: Encountered exception while attempting to send transaction: {e}"
-                raise(e)
+            for retries in range(max_retries):
+                try:
+                    response = client.send_transaction(tx, *signers, opts=types.TxOpts(skip_confirmation=skip_confirmation))
+                    return json.dumps(
+                        {
+                            'status': HTTPStatus.OK,
+                            'msg': f"Successfully burned token {str(mint_account)} on {str(owner_account)}",
+                            'tx': response.get('result') if skip_confirmation else response['result']['transaction']['signatures'],
+                        }
+                    )
+                except Exception as e:
+                    msg += f" | ERROR: Encountered exception while attempting to send transaction: {e}, attempt {retries}"
+            raise(e)
         except Exception as e:
             return json.dumps(
                 {
