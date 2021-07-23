@@ -43,7 +43,7 @@ def test(api_endpoint="https://api.devnet.solana.com/"):
     print("Symbol:", symbol)
     deploy_response = json.loads(api.deploy(api_endpoint, name, symbol))
     print("Deploy:", deploy_response)
-    await_confirmation(client, deploy_response['tx'])
+    # await_confirmation(client, deploy_response['tx'])
     assert deploy_response["status"] == 200
     contract = deploy_response.get("contract")
     print(get_metadata(client, contract))
@@ -52,11 +52,11 @@ def test(api_endpoint="https://api.devnet.solana.com/"):
     encrypted_pk1 = api.cipher.encrypt(bytes(wallet.get('private_key')))
     topup_response = json.loads(api.topup(api_endpoint, address1))
     print(f"Topup {address1}:", topup_response)
-    await_confirmation(client, topup_response['tx'])
+    # await_confirmation(client, topup_response['tx'])
     assert topup_response["status"] == 200
     mint_to_response = json.loads(api.mint(api_endpoint, contract, address1, "https://arweave.net/1eH7bZS-6HZH4YOc8T_tGp2Rq25dlhclXJkoa6U55mM/"))
     print("Mint:", mint_to_response)
-    await_confirmation(client, mint_to_response['tx'])
+    # await_confirmation(client, mint_to_response['tx'])
     assert mint_to_response["status"] == 200
     print(get_metadata(client, contract))
     wallet2 = json.loads(api.wallet())
@@ -65,14 +65,14 @@ def test(api_endpoint="https://api.devnet.solana.com/"):
     print(client.request_airdrop(api.public_key, int(1e10)))
     topup_response2 = json.loads(api.topup(api_endpoint, address2))
     print(f"Topup {address2}:", topup_response2)
-    await_confirmation(client, topup_response2['tx'])
+    # await_confirmation(client, topup_response2['tx'])
     assert topup_response2["status"] == 200
     send_response = json.loads(api.send(api_endpoint, contract, address1, address2, encrypted_pk1))
     assert send_response["status"] == 200
-    await_confirmation(client, send_response['tx'])
+    # await_confirmation(client, send_response['tx'])
     burn_response = json.loads(api.burn(api_endpoint, contract, address2, encrypted_pk2))
     print("Burn:", burn_response)
-    await_confirmation(client, burn_response['tx'])
+    # await_confirmation(client, burn_response['tx'])
     assert burn_response["status"] == 200
     print("Success!")
 
