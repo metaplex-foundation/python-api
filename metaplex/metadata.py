@@ -1,3 +1,4 @@
+from typing import Union
 import struct
 from enum import IntEnum
 from construct import Bytes, Flag, Int8ul
@@ -21,6 +22,18 @@ SYSTEM_PROGRAM_ID = PublicKey('11111111111111111111111111111111')
 SYSVAR_RENT_PUBKEY = PublicKey('SysvarRent111111111111111111111111111111111') 
 ASSOCIATED_TOKEN_ACCOUNT_PROGRAM_ID = PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL')
 TOKEN_PROGRAM_ID = PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA')
+
+def get_metadata_account(mint_key):
+    return PublicKey.find_program_address(
+        [b'metadata', bytes(METADATA_PROGRAM_ID), bytes(PublicKey(mint_key))],
+        METADATA_PROGRAM_ID
+    )[0]
+
+def get_edition(mint_key):
+    return PublicKey.find_program_address(
+        [b'metadata', bytes(METADATA_PROGRAM_ID), bytes(PublicKey(mint_key)), b"edition"],
+        METADATA_PROGRAM_ID
+    )[0]
 
 def create_associated_token_account_instruction(associated_token_account, payer, wallet_address, token_mint_address):
     keys = [
@@ -93,10 +106,7 @@ def create_metadata_instruction_data(name, symbol, creators):
     )
 
 def create_metadata_instruction(data, update_authority, mint_key, mint_authority_key, payer):
-    metadata_account = PublicKey.find_program_address(
-        [b'metadata', bytes(METADATA_PROGRAM_ID), bytes(PublicKey(mint_key))],
-        METADATA_PROGRAM_ID
-    )[0]
+    metadata_account = get_metadata_account(mint_key)
     keys = [
         AccountMeta(pubkey=metadata_account, is_signer=False, is_writable=True),
         AccountMeta(pubkey=mint_key, is_signer=False, is_writable=False),
@@ -131,12 +141,12 @@ def unpack_metadata_account(data):
     i += 2
     has_creator = data[i] 
     i += 1
+    creators = []
+    verified = []
+    share = []
     if has_creator:
         creator_len = struct.unpack('<I', data[i:i+4])[0]
         i += 4
-        creators = []
-        verified = []
-        share = []
         for _ in range(creator_len):
             creator = base58.b58encode(bytes(struct.unpack('<' + "B"*32, data[i:i+32])))
             creators.append(creator)
@@ -152,9 +162,9 @@ def unpack_metadata_account(data):
         "update_authority": source_account,
         "mint": mint_account,
         "data": {
-            "name": bytes(name).decode("utf-8"),
-            "symbol": bytes(symbol).decode("utf-8"),
-            "uri": bytes(uri).decode("utf-8"),
+            "name": bytes(name).decode("utf-8").strip("\x00"),
+            "symbol": bytes(symbol).decode("utf-8").strip("\x00"),
+            "uri": bytes(uri).decode("utf-8").strip("\x00"),
             "seller_fee_basis_points": fee,
             "creators": creators,
             "verified": verified,
@@ -166,10 +176,7 @@ def unpack_metadata_account(data):
     return metadata
 
 def get_metadata(client, mint_key):
-    metadata_account = PublicKey.find_program_address(
-        [b'metadata', bytes(METADATA_PROGRAM_ID), bytes(PublicKey(mint_key))],
-        METADATA_PROGRAM_ID
-    )[0]
+    metadata_account = get_metadata_account(mint_key)
     data = base64.b64decode(client.get_account_info(metadata_account)['result']['value']['data'][0])
     metadata = unpack_metadata_account(data)
     return metadata
@@ -188,12 +195,39 @@ def update_metadata_instruction_data(name, symbol, uri, creators, verified, shar
     )
 
 def update_metadata_instruction(data, update_authority, mint_key):
-    metadata_account = PublicKey.find_program_address(
-        [b'metadata', bytes(METADATA_PROGRAM_ID), bytes(PublicKey(mint_key))],
-        METADATA_PROGRAM_ID
-    )[0]
+    metadata_account = get_metadata_account(mint_key)
     keys = [
         AccountMeta(pubkey=metadata_account, is_signer=False, is_writable=True),
         AccountMeta(pubkey=update_authority, is_signer=True, is_writable=False),
     ]
     return TransactionInstruction(keys=keys, program_id=METADATA_PROGRAM_ID, data=data)
+
+def create_master_edition_instruction(
+    mint: PublicKey,
+    update_authority: PublicKey,
+    mint_authority: PublicKey,
+    payer: PublicKey,
+    supply: Union[int, None],
+):
+    edition_account = get_edition(mint)
+    metadata_account = get_metadata_account(mint)
+    if supply is None:
+        data = struct.pack("<BB", 10, 0)
+    else:
+        data = struct.pack("<BBQ", 10, 1, supply)
+    keys = [
+        AccountMeta(pubkey=edition_account, is_signer=False, is_writable=True),
+        AccountMeta(pubkey=mint, is_signer=False, is_writable=True),
+        AccountMeta(pubkey=update_authority, is_signer=True, is_writable=False),
+        AccountMeta(pubkey=mint_authority, is_signer=True, is_writable=False),
+        AccountMeta(pubkey=payer, is_signer=True, is_writable=False),
+        AccountMeta(pubkey=metadata_account, is_signer=False, is_writable=False),
+        AccountMeta(pubkey=PublicKey(TOKEN_PROGRAM_ID), is_signer=False, is_writable=False),
+        AccountMeta(pubkey=PublicKey(SYSTEM_PROGRAM_ID), is_signer=False, is_writable=False),
+        AccountMeta(pubkey=PublicKey(SYSVAR_RENT_PUBKEY), is_signer=False, is_writable=False),
+    ]
+    return TransactionInstruction(
+        keys=keys,
+        program_id=METADATA_PROGRAM_ID,
+        data=data,
+    )
