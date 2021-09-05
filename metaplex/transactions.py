@@ -14,6 +14,7 @@ from spl.token.instructions import (
 )
 from metaplex.metadata import (
     create_associated_token_account_instruction,
+    create_master_edition_instruction,
     create_metadata_instruction_data, 
     create_metadata_instruction,
     get_metadata,
@@ -107,7 +108,7 @@ def topup(api_endpoint, sender_account, to, amount=None):
     return tx, signers
 
 
-def mint(api_endpoint, source_account, contract_key, dest_key, link):
+def mint(api_endpoint, source_account, contract_key, dest_key, link, supply=1):
     """
     Mint a token on the specified network and contract, into the wallet specified by address.
     Required parameters: batch, sequence, limit
@@ -172,6 +173,14 @@ def mint(api_endpoint, source_account, contract_key, dest_key, link):
         mint_account,
     )
     tx = tx.add(update_metadata_ix) 
+    create_master_edition_ix = create_master_edition_instruction(
+        mint=mint_account,
+        update_authority=source_account.public_key(),
+        mint_authority=source_account.public_key(),
+        payer=source_account.public_key(),
+        supply=supply,
+    )
+    tx = tx.add(create_master_edition_ix) 
     return tx, signers
 
 

@@ -32,6 +32,7 @@ class MetaplexAPI():
         """
         try:
             tx, signers, contract = deploy(api_endpoint, self.account, name, symbol)
+            print(contract)
             resp = execute(
                 api_endpoint,
                 tx,
@@ -69,34 +70,25 @@ class MetaplexAPI():
         except:
             return json.dumps({"status": 400})
 
-    def mint(self, api_endpoint, contract_key, dest_key, link, max_retries=3, skip_confirmation=False, max_timeout=60, target=20, finalized=True):
+    def mint(self, api_endpoint, contract_key, dest_key, link, max_retries=3, skip_confirmation=False, max_timeout=60, target=20, finalized=True, supply=1 ):
         """
-        Mint a token on the specified network and contract, into the wallet specified by address.
-        Required parameters: batch, sequence, limit
-        These are all 32-bit unsigned ints and are assembled into a 96-bit integer ID on Ethereum and compatible blockchains.
-        Where this is not possible we'll look for an alternate mapping.
-
-        Additional character fields: name, description, link, created
-        These are text fields intended to be written directly to the blockchain. created is an ISO standard timestamp string (UTC)
-        content is an optional JSON string for customer-specific data.
-        Return a status flag of success or fail and the native transaction data.
+        Mints an NFT to an account, updates the metadata and creates a master edition
         """
-        try:
-            tx, signers = mint(api_endpoint, self.account, contract_key, dest_key, link)
-            resp = execute(
-                api_endpoint,
-                tx,
-                signers,
-                max_retries=max_retries,
-                skip_confirmation=skip_confirmation,
-                max_timeout=max_timeout,
-                target=target,
-                finalized=finalized,
-            )
-            resp["status"] = 200
-            return json.dumps(resp)
-        except:
-            return json.dumps({"status": 400})
+        tx, signers = mint(api_endpoint, self.account, contract_key, dest_key, link, supply=supply)
+        resp = execute(
+            api_endpoint,
+            tx,
+            signers,
+            max_retries=max_retries,
+            skip_confirmation=skip_confirmation,
+            max_timeout=max_timeout,
+            target=target,
+            finalized=finalized,
+        )
+        resp["status"] = 200
+        return json.dumps(resp)
+        # except:
+        #     return json.dumps({"status": 400})
 
     def send(self, api_endpoint, contract_key, sender_key, dest_key, encrypted_private_key, max_retries=3, skip_confirmation=False, max_timeout=60, target=20, finalized=True):
         """
