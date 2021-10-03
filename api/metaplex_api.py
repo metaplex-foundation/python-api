@@ -25,13 +25,13 @@ class MetaplexAPI():
             }
         )
 
-    def deploy(self, api_endpoint, name, symbol, max_retries=3, skip_confirmation=False, max_timeout=60, target=20, finalized=True):
+    def deploy(self, api_endpoint, name, symbol, fees=0, max_retries=3, skip_confirmation=False, max_timeout=60, target=20, finalized=True):
         """
         Deploy a contract to the blockchain (on network that support contracts). Takes the network ID and contract name, plus initialisers of name and symbol. Process may vary significantly between blockchains.
         Returns status code of success or fail, the contract address, and the native transaction data.
         """
         try:
-            tx, signers, contract = deploy(api_endpoint, self.account, name, symbol)
+            tx, signers, contract = deploy(api_endpoint, self.account, name, symbol, fees)
             print(contract)
             resp = execute(
                 api_endpoint,
