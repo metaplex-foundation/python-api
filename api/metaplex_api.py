@@ -2,7 +2,7 @@ import json
 from cryptography.fernet import Fernet
 import base58
 from solana.account import Account 
-from metaplex.transactions import deploy, topup, mint, send, burn
+from metaplex.transactions import deploy, topup, mint, send, burn, update_token_metadata
 from utils.execution_engine import execute
 
 class MetaplexAPI():
@@ -89,6 +89,25 @@ class MetaplexAPI():
         return json.dumps(resp)
         # except:
         #     return json.dumps({"status": 400})
+        
+    def update_token_metadata(self, api_endpoint, mint_token_id, link,  data, creators_addresses, creators_verified, creators_share, max_retries=3, skip_confirmation=False, max_timeout=60, target=20, finalized=True, supply=1 ):
+            """
+            Updates the json metadata for a given mint token id.
+            """
+            tx, signers = update_token_metadata(api_endpoint, self.account, mint_token_id, link,  data, creators_addresses, creators_verified, creators_share)
+            resp = execute(
+                api_endpoint,
+                tx,
+                signers,
+                max_retries=max_retries,
+                skip_confirmation=skip_confirmation,
+                max_timeout=max_timeout,
+                target=target,
+                finalized=finalized,
+            )
+            resp["status"] = 200
+            return json.dumps(resp)
+
 
     def send(self, api_endpoint, contract_key, sender_key, dest_key, encrypted_private_key, max_retries=3, skip_confirmation=False, max_timeout=60, target=20, finalized=True):
         """
