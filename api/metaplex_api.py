@@ -1,9 +1,10 @@
 import json
 from cryptography.fernet import Fernet
 import base58
-from solana.account import Account 
+from solana.account import Account
 from metaplex.transactions import deploy, topup, mint, send, burn, update_token_metadata
 from utils.execution_engine import execute
+
 
 class MetaplexAPI():
 
@@ -16,7 +17,7 @@ class MetaplexAPI():
     def wallet(self):
         """ Generate a wallet and return the address and private key. """
         account = Account()
-        pub_key = account.public_key() 
+        pub_key = account.public_key()
         private_key = list(account.secret_key()[:32])
         return json.dumps(
             {
@@ -31,7 +32,8 @@ class MetaplexAPI():
         Returns status code of success or fail, the contract address, and the native transaction data.
         """
         try:
-            tx, signers, contract = deploy(api_endpoint, self.account, name, symbol)
+            tx, signers, contract = deploy(
+                api_endpoint, self.account, name, symbol)
             print(contract)
             resp = execute(
                 api_endpoint,
@@ -70,11 +72,12 @@ class MetaplexAPI():
         except:
             return json.dumps({"status": 400})
 
-    def mint(self, api_endpoint, contract_key, dest_key, link, max_retries=3, skip_confirmation=False, max_timeout=60, target=20, finalized=True, supply=1 ):
+    def mint(self, api_endpoint, contract_key, dest_key, link, max_retries=3, skip_confirmation=False, max_timeout=60, target=20, finalized=True, supply=1):
         """
         Mints an NFT to an account, updates the metadata and creates a master edition
         """
-        tx, signers = mint(api_endpoint, self.account, contract_key, dest_key, link, supply=supply)
+        tx, signers = mint(api_endpoint, self.account,
+                           contract_key, dest_key, link, supply=supply)
         resp = execute(
             api_endpoint,
             tx,
@@ -89,25 +92,25 @@ class MetaplexAPI():
         return json.dumps(resp)
         # except:
         #     return json.dumps({"status": 400})
-        
-    def update_token_metadata(self, api_endpoint, mint_token_id, link,  data, creators_addresses, creators_verified, creators_share,fee, max_retries=3, skip_confirmation=False, max_timeout=60, target=20, finalized=True, supply=1 ):
-            """
-            Updates the json metadata for a given mint token id.
-            """
-            tx, signers = update_token_metadata(api_endpoint, self.account, mint_token_id, link,  data, creators_addresses, creators_verified, creators_share, fee)
-            resp = execute(
-                api_endpoint,
-                tx,
-                signers,
-                max_retries=max_retries,
-                skip_confirmation=skip_confirmation,
-                max_timeout=max_timeout,
-                target=target,
-                finalized=finalized,
-            )
-            resp["status"] = 200
-            return json.dumps(resp)
 
+    def update_token_metadata(self, api_endpoint, mint_token_id, link,  data, creators_addresses, creators_verified, creators_share, fee, max_retries=3, skip_confirmation=False, max_timeout=60, target=20, finalized=True, supply=1):
+        """
+        Updates the json metadata for a given mint token id.
+        """
+        tx, signers = update_token_metadata(api_endpoint, self.account, mint_token_id,
+                                            link,  data, creators_addresses, creators_verified, creators_share, fee)
+        resp = execute(
+            api_endpoint,
+            tx,
+            signers,
+            max_retries=max_retries,
+            skip_confirmation=skip_confirmation,
+            max_timeout=max_timeout,
+            target=target,
+            finalized=finalized,
+        )
+        resp["status"] = 200
+        return json.dumps(resp)
 
     def send(self, api_endpoint, contract_key, sender_key, dest_key, encrypted_private_key, max_retries=3, skip_confirmation=False, max_timeout=60, target=20, finalized=True):
         """
@@ -117,7 +120,8 @@ class MetaplexAPI():
         """
         try:
             private_key = list(self.cipher.decrypt(encrypted_private_key))
-            tx, signers = send(api_endpoint, self.account, contract_key, sender_key, dest_key, private_key)
+            tx, signers = send(api_endpoint, self.account,
+                               contract_key, sender_key, dest_key, private_key)
             resp = execute(
                 api_endpoint,
                 tx,
@@ -141,7 +145,8 @@ class MetaplexAPI():
         """
         try:
             private_key = list(self.cipher.decrypt(encrypted_private_key))
-            tx, signers = burn(api_endpoint, contract_key, owner_key, private_key)
+            tx, signers = burn(api_endpoint, contract_key,
+                               owner_key, private_key)
             resp = execute(
                 api_endpoint,
                 tx,

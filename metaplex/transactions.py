@@ -1,10 +1,10 @@
 import json
 import base64
-from solana.publickey import PublicKey 
+from solana.publickey import PublicKey
 from solana.transaction import Transaction
-from solana.account import Account 
+from solana.account import Account
 from solana.rpc.api import Client
-from solana.system_program import transfer, TransferParams, create_account, CreateAccountParams 
+from solana.system_program import transfer, TransferParams, create_account, CreateAccountParams
 from spl.token._layouts import MINT_LAYOUT, ACCOUNT_LAYOUT
 from spl.token.instructions import (
     get_associated_token_address, mint_to, MintToParams,
@@ -15,7 +15,7 @@ from spl.token.instructions import (
 from metaplex.metadata import (
     create_associated_token_account_instruction,
     create_master_edition_instruction,
-    create_metadata_instruction_data, 
+    create_metadata_instruction_data,
     create_metadata_instruction,
     get_metadata,
     update_metadata_instruction_data,
@@ -30,15 +30,16 @@ def deploy(api_endpoint, source_account, name, symbol):
     client = Client(api_endpoint)
     # List non-derived accounts
     mint_account = Account()
-    token_account = TOKEN_PROGRAM_ID 
+    token_account = TOKEN_PROGRAM_ID
     # List signers
     signers = [source_account, mint_account]
     # Start transaction
     tx = Transaction()
     # Get the minimum rent balance for a mint account
-    min_rent_reseponse = client.get_minimum_balance_for_rent_exemption(MINT_LAYOUT.sizeof()) # type: ignore
+    min_rent_reseponse = client.get_minimum_balance_for_rent_exemption(
+        MINT_LAYOUT.sizeof())  # type: ignore
     lamports = min_rent_reseponse["result"]
-    # Generate Mint 
+    # Generate Mint
     create_mint_account_ix = create_account(
         CreateAccountParams(
             from_pubkey=source_account.public_key(),
@@ -61,7 +62,8 @@ def deploy(api_endpoint, source_account, name, symbol):
     tx = tx.add(initialize_mint_ix)
     # Create Token Metadata
     create_metadata_ix = create_metadata_instruction(
-        data=create_metadata_instruction_data(name, symbol, [str(source_account.public_key())]),
+        data=create_metadata_instruction_data(
+            name, symbol, [str(source_account.public_key())]),
         update_authority=source_account.public_key(),
         mint_key=mint_account.public_key(),
         mint_authority_key=source_account.public_key(),
@@ -69,12 +71,12 @@ def deploy(api_endpoint, source_account, name, symbol):
     )
     tx = tx.add(create_metadata_ix)
     return tx, signers, str(mint_account.public_key())
-    
+
 
 def wallet():
     """ Generate a wallet and return the address and private key. """
     account = Account()
-    pub_key = account.public_key() 
+    pub_key = account.public_key()
     private_key = list(account.secret_key()[:32])
     return json.dumps(
         {
@@ -90,22 +92,25 @@ def topup(api_endpoint, sender_account, to, amount=None):
     """
     # Connect to the api_endpoint
     client = Client(api_endpoint)
-    # List accounts 
+    # List accounts
     dest_account = PublicKey(to)
     # List signers
     signers = [sender_account]
     # Start transaction
     tx = Transaction()
-    # Determine the amount to send 
+    # Determine the amount to send
     if amount is None:
-        min_rent_reseponse = client.get_minimum_balance_for_rent_exemption(ACCOUNT_LAYOUT.sizeof())
+        min_rent_reseponse = client.get_minimum_balance_for_rent_exemption(
+            ACCOUNT_LAYOUT.sizeof())
         lamports = min_rent_reseponse["result"]
     else:
         lamports = int(amount)
     # Generate transaction
-    transfer_ix = transfer(TransferParams(from_pubkey=sender_account.public_key(), to_pubkey=dest_account, lamports=lamports))
+    transfer_ix = transfer(TransferParams(
+        from_pubkey=sender_account.public_key(), to_pubkey=dest_account, lamports=lamports))
     tx = tx.add(transfer_ix)
     return tx, signers
+
 
 def update_token_metadata(api_endpoint, source_account, mint_token_id, link, data, creators_addresses, creators_verified, creators_share, fee):
     """
@@ -129,7 +134,7 @@ def update_token_metadata(api_endpoint, source_account, mint_token_id, link, dat
         source_account.public_key(),
         mint_account,
     )
-    tx = tx.add(update_metadata_ix) 
+    tx = tx.add(update_metadata_ix)
     return tx, signers
 
 
@@ -155,22 +160,25 @@ def mint(api_endpoint, source_account, contract_key, dest_key, link, supply=1):
     # Start transaction
     tx = Transaction()
     # Create Associated Token Account
-    associated_token_account = get_associated_token_address(user_account, mint_account)
-    associated_token_account_info = client.get_account_info(associated_token_account)
+    associated_token_account = get_associated_token_address(
+        user_account, mint_account)
+    associated_token_account_info = client.get_account_info(
+        associated_token_account)
     # Check if PDA is initialized. If not, create the account
     account_info = associated_token_account_info['result']['value']
-    if account_info is not None: 
-        account_state = ACCOUNT_LAYOUT.parse(base64.b64decode(account_info['data'][0])).state
+    if account_info is not None:
+        account_state = ACCOUNT_LAYOUT.parse(
+            base64.b64decode(account_info['data'][0])).state
     else:
         account_state = 0
     if account_state == 0:
         associated_token_account_ix = create_associated_token_account_instruction(
             associated_token_account=associated_token_account,
-            payer=source_account.public_key(), # signer
+            payer=source_account.public_key(),  # signer
             wallet_address=user_account,
             token_mint_address=mint_account,
         )
-        tx = tx.add(associated_token_account_ix)  
+        tx = tx.add(associated_token_account_ix)
     # Mint NFT to the newly create associated token account
     mint_to_ix = mint_to(
         MintToParams(
@@ -182,7 +190,7 @@ def mint(api_endpoint, source_account, contract_key, dest_key, link, supply=1):
             signers=[source_account.public_key()],
         )
     )
-    tx = tx.add(mint_to_ix) 
+    tx = tx.add(mint_to_ix)
     metadata = get_metadata(client, mint_account)
     update_metadata_data = update_metadata_instruction_data(
         metadata['data']['name'],
@@ -198,7 +206,7 @@ def mint(api_endpoint, source_account, contract_key, dest_key, link, supply=1):
         source_account.public_key(),
         mint_account,
     )
-    tx = tx.add(update_metadata_ix) 
+    tx = tx.add(update_metadata_ix)
     create_master_edition_ix = create_master_edition_instruction(
         mint=mint_account,
         update_authority=source_account.public_key(),
@@ -206,7 +214,7 @@ def mint(api_endpoint, source_account, contract_key, dest_key, link, supply=1):
         payer=source_account.public_key(),
         supply=supply,
     )
-    tx = tx.add(create_master_edition_ix) 
+    tx = tx.add(create_master_edition_ix)
     return tx, signers
 
 
@@ -219,8 +227,8 @@ def send(api_endpoint, source_account, contract_key, sender_key, dest_key, priva
     # Initialize Client
     client = Client(api_endpoint)
     # List non-derived accounts
-    owner_account = Account(private_key) # Owner of contract 
-    sender_account = PublicKey(sender_key) # Public key of `owner_account`
+    owner_account = Account(private_key)  # Owner of contract
+    sender_account = PublicKey(sender_key)  # Public key of `owner_account`
     token_account = TOKEN_PROGRAM_ID
     mint_account = PublicKey(contract_key)
     dest_account = PublicKey(dest_key)
@@ -229,25 +237,29 @@ def send(api_endpoint, source_account, contract_key, sender_key, dest_key, priva
     # Start transaction
     tx = Transaction()
     # Find PDA for sender
-    token_pda_address = get_associated_token_address(sender_account, mint_account)
-    if client.get_account_info(token_pda_address)['result']['value'] is None: 
+    token_pda_address = get_associated_token_address(
+        sender_account, mint_account)
+    if client.get_account_info(token_pda_address)['result']['value'] is None:
         raise Exception
     # Check if PDA is initialized for receiver. If not, create the account
-    associated_token_account = get_associated_token_address(dest_account, mint_account)
-    associated_token_account_info = client.get_account_info(associated_token_account)
+    associated_token_account = get_associated_token_address(
+        dest_account, mint_account)
+    associated_token_account_info = client.get_account_info(
+        associated_token_account)
     account_info = associated_token_account_info['result']['value']
-    if account_info is not None: 
-        account_state = ACCOUNT_LAYOUT.parse(base64.b64decode(account_info['data'][0])).state
+    if account_info is not None:
+        account_state = ACCOUNT_LAYOUT.parse(
+            base64.b64decode(account_info['data'][0])).state
     else:
         account_state = 0
     if account_state == 0:
         associated_token_account_ix = create_associated_token_account_instruction(
             associated_token_account=associated_token_account,
-            payer=source_account.public_key(), # signer
+            payer=source_account.public_key(),  # signer
             wallet_address=dest_account,
             token_mint_address=mint_account,
         )
-        tx = tx.add(associated_token_account_ix)        
+        tx = tx.add(associated_token_account_ix)
     # Transfer the Token from the sender account to the associated token account
     spl_transfer_ix = spl_transfer(
         SPLTransferParams(
@@ -280,8 +292,9 @@ def burn(api_endpoint, contract_key, owner_key, private_key):
     # Start transaction
     tx = Transaction()
     # Find PDA for sender
-    token_pda_address = get_associated_token_address(owner_account, mint_account)
-    if client.get_account_info(token_pda_address)['result']['value'] is None: 
+    token_pda_address = get_associated_token_address(
+        owner_account, mint_account)
+    if client.get_account_info(token_pda_address)['result']['value'] is None:
         raise Exception
     # Burn token
     burn_ix = spl_burn(
