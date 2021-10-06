@@ -59,8 +59,9 @@ def _get_data_buffer(name, symbol, uri, creators, verified=None, share=None):
         *list(symbol.encode()),
         len(uri),
         *list(uri.encode()),
-        0,
+        500,
     ]
+    print(args)
     byte_fmt = "<" 
     byte_fmt += "I" + "B"*len(name)
     byte_fmt += "I" + "B"*len(symbol)
