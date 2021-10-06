@@ -47,7 +47,7 @@ def create_associated_token_account_instruction(associated_token_account, payer,
     ]
     return TransactionInstruction(keys=keys, program_id=ASSOCIATED_TOKEN_ACCOUNT_PROGRAM_ID)
 
-def _get_data_buffer(name, symbol, uri, creators, verified=None, share=None):
+def _get_data_buffer(name, symbol, uri, creators, fee, verified=None, share=None):
     if isinstance(share, list):
         assert(len(share) == len(creators))
     if isinstance(verified, list):
@@ -59,7 +59,7 @@ def _get_data_buffer(name, symbol, uri, creators, verified=None, share=None):
         *list(symbol.encode()),
         len(uri),
         *list(uri.encode()),
-        500,
+        fee,
     ]
     print(args)
     byte_fmt = "<" 
@@ -88,8 +88,8 @@ def _get_data_buffer(name, symbol, uri, creators, verified=None, share=None):
     buffer = struct.pack(byte_fmt, *args)
     return buffer
     
-def create_metadata_instruction_data(name, symbol, creators):
-    _data = _get_data_buffer(name, symbol, " "*64, creators)
+def create_metadata_instruction_data(name, symbol, creators, fee):
+    _data = _get_data_buffer(name, symbol, " "*64, creators, fee)
     metadata_args_layout = cStruct(
         "data" / Bytes(len(_data)),
         "is_mutable" / Flag,
@@ -182,8 +182,8 @@ def get_metadata(client, mint_key):
     metadata = unpack_metadata_account(data)
     return metadata
 
-def update_metadata_instruction_data(name, symbol, uri, creators, verified, share):
-    _data = bytes([1]) + _get_data_buffer(name, symbol, uri, creators, verified, share) + bytes([0, 0])
+def update_metadata_instruction_data(name, symbol, uri, creators, fee, verified, share):
+    _data = bytes([1]) + _get_data_buffer(name, symbol, uri, creators, fee, verified, share) + bytes([0, 0])
     instruction_layout = cStruct(
         "instruction_type" / Int8ul,
         "args" / Bytes(len(_data)),

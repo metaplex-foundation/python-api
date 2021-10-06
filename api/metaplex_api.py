@@ -90,11 +90,11 @@ class MetaplexAPI():
         # except:
         #     return json.dumps({"status": 400})
         
-    def update_token_metadata(self, api_endpoint, mint_token_id, link,  data, creators_addresses, creators_verified, creators_share, max_retries=3, skip_confirmation=False, max_timeout=60, target=20, finalized=True, supply=1 ):
+    def update_token_metadata(self, api_endpoint, mint_token_id, link,  data, creators_addresses, creators_verified, creators_share,fee, max_retries=3, skip_confirmation=False, max_timeout=60, target=20, finalized=True, supply=1 ):
             """
             Updates the json metadata for a given mint token id.
             """
-            tx, signers = update_token_metadata(api_endpoint, self.account, mint_token_id, link,  data, creators_addresses, creators_verified, creators_share)
+            tx, signers = update_token_metadata(api_endpoint, self.account, mint_token_id, link,  data, creators_addresses, creators_verified, creators_share, fee)
             resp = execute(
                 api_endpoint,
                 tx,
