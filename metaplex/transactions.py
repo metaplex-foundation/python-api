@@ -107,6 +107,31 @@ def topup(api_endpoint, sender_account, to, amount=None):
     tx = tx.add(transfer_ix)
     return tx, signers
 
+def update_token_metadata(api_endpoint, source_account, mint_token_id, link, data, fee, creators_addresses, creators_verified, creators_share):
+    """
+    Updates the json metadata for a given mint token id.
+    """
+    mint_account = PublicKey(mint_token_id)
+    signers = [source_account]
+
+    tx = Transaction()
+    update_metadata_data = update_metadata_instruction_data(
+        data['name'],
+        data['symbol'],
+        link,
+        fee,
+        creators_addresses,        
+        creators_verified,
+        creators_share,
+    )
+    update_metadata_ix = update_metadata_instruction(
+        update_metadata_data,
+        source_account.public_key(),
+        mint_account,
+    )
+    tx = tx.add(update_metadata_ix) 
+    return tx, signers
+
 
 def mint(api_endpoint, source_account, contract_key, dest_key, link, supply=1):
     """
@@ -164,6 +189,7 @@ def mint(api_endpoint, source_account, contract_key, dest_key, link, supply=1):
         metadata['data']['symbol'],
         link,
         metadata['data']['creators'],
+        metadata['data']['fee'],
         metadata['data']['verified'],
         metadata['data']['share'],
     )
