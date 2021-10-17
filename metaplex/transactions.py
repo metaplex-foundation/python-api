@@ -25,7 +25,7 @@ from metaplex.metadata import (
 )
 
 
-def deploy(api_endpoint, source_account, name, symbol):
+def deploy(api_endpoint, source_account, name, symbol, fee=500):
     # Initalize Client
     client = Client(api_endpoint)
     # List non-derived accounts
@@ -61,7 +61,7 @@ def deploy(api_endpoint, source_account, name, symbol):
     tx = tx.add(initialize_mint_ix)
     # Create Token Metadata
     create_metadata_ix = create_metadata_instruction(
-        data=create_metadata_instruction_data(name, symbol, [str(source_account.public_key())]),
+        data=create_metadata_instruction_data(name, symbol, fee, [str(source_account.public_key())]),
         update_authority=source_account.public_key(),
         mint_key=mint_account.public_key(),
         mint_authority_key=source_account.public_key(),
@@ -188,8 +188,8 @@ def mint(api_endpoint, source_account, contract_key, dest_key, link, supply=1):
         metadata['data']['name'],
         metadata['data']['symbol'],
         link,
+        metadata['data']['seller_fee_basis_points'],
         metadata['data']['creators'],
-        metadata['data']['fee'],
         metadata['data']['verified'],
         metadata['data']['share'],
     )
