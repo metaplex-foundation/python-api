@@ -1,7 +1,7 @@
 import json
 from cryptography.fernet import Fernet
 import base58
-from solana.account import Account 
+from solana.keypair import Keypair 
 from metaplex.transactions import deploy, topup, mint, send, burn, update_token_metadata
 from utils.execution_engine import execute
 
@@ -10,14 +10,14 @@ class MetaplexAPI():
     def __init__(self, cfg):
         self.private_key = list(base58.b58decode(cfg["PRIVATE_KEY"]))[:32]
         self.public_key = cfg["PUBLIC_KEY"]
-        self.account = Account(self.private_key)
+        self.keypair = Keypair(self.private_key)
         self.cipher = Fernet(cfg["DECRYPTION_KEY"])
 
     def wallet(self):
         """ Generate a wallet and return the address and private key. """
-        account = Account()
-        pub_key = account.public_key() 
-        private_key = list(account.secret_key()[:32])
+        keypair = Keypair()
+        pub_key = keypair.public_key 
+        private_key = list(keypair.seed)
         return json.dumps(
             {
                 'address': str(pub_key),
@@ -25,13 +25,13 @@ class MetaplexAPI():
             }
         )
 
-    def deploy(self, api_endpoint, name, symbol, max_retries=3, skip_confirmation=False, max_timeout=60, target=20, finalized=True):
+    def deploy(self, api_endpoint, name, symbol, fees, max_retries=3, skip_confirmation=False, max_timeout=60, target=20, finalized=True):
         """
         Deploy a contract to the blockchain (on network that support contracts). Takes the network ID and contract name, plus initialisers of name and symbol. Process may vary significantly between blockchains.
         Returns status code of success or fail, the contract address, and the native transaction data.
         """
         try:
-            tx, signers, contract = deploy(api_endpoint, self.account, name, symbol)
+            tx, signers, contract = deploy(api_endpoint, self.keypair, name, symbol, fees)
             print(contract)
             resp = execute(
                 api_endpoint,
@@ -54,7 +54,7 @@ class MetaplexAPI():
         Send a small amount of native currency to the specified wallet to handle gas fees. Return a status flag of success or fail and the native transaction data.
         """
         try:
-            tx, signers = topup(api_endpoint, self.account, to, amount=amount)
+            tx, signers = topup(api_endpoint, self.keypair, to, amount=amount)
             resp = execute(
                 api_endpoint,
                 tx,
@@ -74,7 +74,7 @@ class MetaplexAPI():
         """
         Mints an NFT to an account, updates the metadata and creates a master edition
         """
-        tx, signers = mint(api_endpoint, self.account, contract_key, dest_key, link, supply=supply)
+        tx, signers = mint(api_endpoint, self.keypair, contract_key, dest_key, link, supply=supply)
         resp = execute(
             api_endpoint,
             tx,
@@ -94,7 +94,7 @@ class MetaplexAPI():
             """
             Updates the json metadata for a given mint token id.
             """
-            tx, signers = update_token_metadata(api_endpoint, self.account, mint_token_id, link, data, fee, creators_addresses, creators_verified, creators_share)
+            tx, signers = update_token_metadata(api_endpoint, self.keypair, mint_token_id, link, data, fee, creators_addresses, creators_verified, creators_share)
             resp = execute(
                 api_endpoint,
                 tx,
@@ -117,7 +117,7 @@ class MetaplexAPI():
         """
         try:
             private_key = list(self.cipher.decrypt(encrypted_private_key))
-            tx, signers = send(api_endpoint, self.account, contract_key, sender_key, dest_key, private_key)
+            tx, signers = send(api_endpoint, self.keypair, contract_key, sender_key, dest_key, private_key)
             resp = execute(
                 api_endpoint,
                 tx,

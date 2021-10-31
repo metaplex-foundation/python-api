@@ -108,6 +108,7 @@ def create_metadata_instruction_data(name, symbol, fee, creators):
 
 def create_metadata_instruction(data, update_authority, mint_key, mint_authority_key, payer):
     metadata_account = get_metadata_account(mint_key)
+    print(metadata_account)
     keys = [
         AccountMeta(pubkey=metadata_account, is_signer=False, is_writable=True),
         AccountMeta(pubkey=mint_key, is_signer=False, is_writable=False),

@@ -77,13 +77,14 @@ Args:
 
 Example:
 ```python
->>> account = Account()
->>> cfg = {"PRIVATE_KEY": base58.b58encode(account.secret_key()).decode("ascii"), "PUBLIC_KEY": str(account.public_key()), "DECRYPTION_KEY": Fernet.generate_key().decode("ascii")}
+>>> account = KeyPair()
+>>> cfg = {"PRIVATE_KEY": base58.b58encode(account.seed).decode("ascii"), "PUBLIC_KEY": str(account.public_key), "DECRYPTION_KEY": Fernet.generate_key().decode("ascii")}
 >>> api_endpoint = "https://api.devnet.solana.com/"
->>> Client(api_endpoint).request_airdrop(account.public_key(), int(1e10))
+>>> Client(api_endpoint).request_airdrop(account.public_key, int(1e10))
 {'jsonrpc': '2.0', 'result': '4ojKmAAesmKtqJkNLRtEjdgg4CkmowuTAjRSpp3K36UvQQvEXwhirV85E8cvWYAD42c3UyFdCtzydMgWokH2mbM', 'id': 1}
 >>> metaplex_api = MetaplexAPI(cfg)
->>> metaplex_api.deploy(api_endpoint, "A"*32, "A"*10)
+>>> seller_basis_fees = 0 # value in 10000 
+>>> metaplex_api.deploy(api_endpoint, "A"*32, "A"*10, seller_basis_fees)
 '{"status": 200, "contract": "7bxe7t1aGdum8o97bkuFeeBTcbARaBn9Gbv5sBd9DZPG", "msg": "Successfully created mint 7bxe7t1aGdum8o97bkuFeeBTcbARaBn9Gbv5sBd9DZPG", "tx": "2qmiWoVi2PNeAjppe2cNbY32zZCJLXMYgdS1zRVFiKJUHE41T5b1WfaZtR2QdFJUXadrqrjbkpwRN5aG2J3KQrQx"}'
 >>> 
 ```
@@ -197,16 +198,16 @@ https://explorer.solana.com/tx/5kd5g4mNBSjoTVYwAasWZx6iB8ijaELfBukKrNYBeDvLomK7i
 
 This is the sequential code from the previous section. These accounts will need to change if you want to do your own test.
 ```
-account = Account()
-cfg = {"PRIVATE_KEY": base58.b58encode(account.secret_key()).decode("ascii"), "PUBLIC_KEY": str(account.public_key()), "DECRYPTION_KEY": Fernet.generate_key().decode("ascii")}
+account = KeyPair()
+cfg = {"PRIVATE_KEY": base58.b58encode(account.seed).decode("ascii"), "PUBLIC_KEY": str(account.public_key), "DECRYPTION_KEY": Fernet.generate_key().decode("ascii")}
 api_endpoint = "https://api.devnet.solana.com/"
-Client(api_endpoint).request_airdrop(account.public_key(), int(1e10))
+Client(api_endpoint).request_airdrop(account.public_key, int(1e10))
 
 # Create API
 metaplex_api = MetaplexAPI(cfg)
 
 # Deploy
-metaplex_api.deploy(api_endpoint, "A"*32, "A"*10)
+metaplex_api.deploy(api_endpoint, "A"*32, "A"*10, 0)
 
 # Topup VtdBygLSt1EJF5M3nUk5CRxuNNTyZFUsKJ4yUVcC6hh
 metaplex_api.topup(api_endpoint, "VtdBygLSt1EJF5M3nUk5CRxuNNTyZFUsKJ4yUVcC6hh")
