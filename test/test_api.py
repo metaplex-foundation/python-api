@@ -4,7 +4,7 @@ import random
 import json
 import time
 import base58
-from solana.account import Account
+from solana.keypair import Keypair
 from solana.rpc.api import Client
 from metaplex.metadata import get_metadata
 from cryptography.fernet import Fernet
@@ -26,17 +26,17 @@ def await_full_confirmation(client, txn, max_timeout=60):
             break
 
 def test(api_endpoint="https://api.devnet.solana.com/"):
-    account = Account()
+    keypair = Keypair()
     cfg = {
-        "PRIVATE_KEY": base58.b58encode(account.secret_key()).decode("ascii"),
-        "PUBLIC_KEY": str(account.public_key()),
+        "PRIVATE_KEY": base58.b58encode(keypair.seed).decode("ascii"),
+        "PUBLIC_KEY": str(keypair.public_key),
         "DECRYPTION_KEY": Fernet.generate_key().decode("ascii"),
     }
     api = MetaplexAPI(cfg)
     client = Client(api_endpoint)
     resp = {}
     while 'result' not in resp:
-        resp = client.request_airdrop(account.public_key(), int(1e9))
+        resp = client.request_airdrop(keypair.public_key, int(1e9))
     print("Request Airdrop:", resp)
     txn = resp['result']
     await_full_confirmation(client, txn)
@@ -45,7 +45,8 @@ def test(api_endpoint="https://api.devnet.solana.com/"):
     symbol = ''.join([random.choice(letters) for i in range(10)])
     print("Name:", name)
     print("Symbol:", symbol)
-    deploy_response = json.loads(api.deploy(api_endpoint, name, symbol))
+    # added seller_basis_fee_points
+    deploy_response = json.loads(api.deploy(api_endpoint, name, symbol, 0))
     print("Deploy:", deploy_response)
     assert deploy_response["status"] == 200
     contract = deploy_response.get("contract")

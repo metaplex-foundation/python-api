@@ -2,7 +2,7 @@ import json
 import base64
 from solana.publickey import PublicKey 
 from solana.transaction import Transaction
-from solana.account import Account 
+from solana.keypair import Keypair 
 from solana.rpc.api import Client
 from solana.system_program import transfer, TransferParams, create_account, CreateAccountParams 
 from spl.token._layouts import MINT_LAYOUT, ACCOUNT_LAYOUT
@@ -25,11 +25,11 @@ from metaplex.metadata import (
 )
 
 
-def deploy(api_endpoint, source_account, name, symbol):
+def deploy(api_endpoint, source_account, name, symbol, fees):
     # Initalize Client
     client = Client(api_endpoint)
     # List non-derived accounts
-    mint_account = Account()
+    mint_account = Keypair()
     token_account = TOKEN_PROGRAM_ID 
     # List signers
     signers = [source_account, mint_account]
@@ -41,8 +41,8 @@ def deploy(api_endpoint, source_account, name, symbol):
     # Generate Mint 
     create_mint_account_ix = create_account(
         CreateAccountParams(
-            from_pubkey=source_account.public_key(),
-            new_account_pubkey=mint_account.public_key(),
+            from_pubkey=source_account.public_key,
+            new_account_pubkey=mint_account.public_key,
             lamports=lamports,
             space=MINT_LAYOUT.sizeof(),
             program_id=token_account,
@@ -53,29 +53,29 @@ def deploy(api_endpoint, source_account, name, symbol):
         InitializeMintParams(
             decimals=0,
             program_id=token_account,
-            mint=mint_account.public_key(),
-            mint_authority=source_account.public_key(),
-            freeze_authority=source_account.public_key(),
+            mint=mint_account.public_key,
+            mint_authority=source_account.public_key,
+            freeze_authority=source_account.public_key,
         )
     )
     tx = tx.add(initialize_mint_ix)
     # Create Token Metadata
     create_metadata_ix = create_metadata_instruction(
-        data=create_metadata_instruction_data(name, symbol, [str(source_account.public_key())]),
-        update_authority=source_account.public_key(),
-        mint_key=mint_account.public_key(),
-        mint_authority_key=source_account.public_key(),
-        payer=source_account.public_key(),
+        data=create_metadata_instruction_data(name, symbol, fees, [str(source_account.public_key)]),
+        update_authority=source_account.public_key,
+        mint_key=mint_account.public_key,
+        mint_authority_key=source_account.public_key,
+        payer=source_account.public_key,
     )
     tx = tx.add(create_metadata_ix)
-    return tx, signers, str(mint_account.public_key())
+    return tx, signers, str(mint_account.public_key)
     
 
 def wallet():
     """ Generate a wallet and return the address and private key. """
-    account = Account()
-    pub_key = account.public_key() 
-    private_key = list(account.secret_key()[:32])
+    account = Keypair()
+    pub_key = account.public_key 
+    private_key = list(account.seed)
     return json.dumps(
         {
             'address': str(pub_key),
@@ -103,7 +103,7 @@ def topup(api_endpoint, sender_account, to, amount=None):
     else:
         lamports = int(amount)
     # Generate transaction
-    transfer_ix = transfer(TransferParams(from_pubkey=sender_account.public_key(), to_pubkey=dest_account, lamports=lamports))
+    transfer_ix = transfer(TransferParams(from_pubkey=sender_account.public_key, to_pubkey=dest_account, lamports=lamports))
     tx = tx.add(transfer_ix)
     return tx, signers
 
@@ -126,7 +126,7 @@ def update_token_metadata(api_endpoint, source_account, mint_token_id, link, dat
     )
     update_metadata_ix = update_metadata_instruction(
         update_metadata_data,
-        source_account.public_key(),
+        source_account.public_key,
         mint_account,
     )
     tx = tx.add(update_metadata_ix) 
@@ -166,7 +166,7 @@ def mint(api_endpoint, source_account, contract_key, dest_key, link, supply=1):
     if account_state == 0:
         associated_token_account_ix = create_associated_token_account_instruction(
             associated_token_account=associated_token_account,
-            payer=source_account.public_key(), # signer
+            payer=source_account.public_key, # signer
             wallet_address=user_account,
             token_mint_address=mint_account,
         )
@@ -177,9 +177,9 @@ def mint(api_endpoint, source_account, contract_key, dest_key, link, supply=1):
             program_id=TOKEN_PROGRAM_ID,
             mint=mint_account,
             dest=associated_token_account,
-            mint_authority=source_account.public_key(),
+            mint_authority=source_account.public_key,
             amount=1,
-            signers=[source_account.public_key()],
+            signers=[source_account.public_key],
         )
     )
     tx = tx.add(mint_to_ix) 
@@ -188,22 +188,22 @@ def mint(api_endpoint, source_account, contract_key, dest_key, link, supply=1):
         metadata['data']['name'],
         metadata['data']['symbol'],
         link,
+        metadata['data']['seller_fee_basis_points'],
         metadata['data']['creators'],
-        metadata['data']['fee'],
         metadata['data']['verified'],
         metadata['data']['share'],
     )
     update_metadata_ix = update_metadata_instruction(
         update_metadata_data,
-        source_account.public_key(),
+        source_account.public_key,
         mint_account,
     )
     tx = tx.add(update_metadata_ix) 
     create_master_edition_ix = create_master_edition_instruction(
         mint=mint_account,
-        update_authority=source_account.public_key(),
-        mint_authority=source_account.public_key(),
-        payer=source_account.public_key(),
+        update_authority=source_account.public_key,
+        mint_authority=source_account.public_key,
+        payer=source_account.public_key,
         supply=supply,
     )
     tx = tx.add(create_master_edition_ix) 
@@ -219,7 +219,7 @@ def send(api_endpoint, source_account, contract_key, sender_key, dest_key, priva
     # Initialize Client
     client = Client(api_endpoint)
     # List non-derived accounts
-    owner_account = Account(private_key) # Owner of contract 
+    owner_account = Keypair(private_key) # Owner of contract 
     sender_account = PublicKey(sender_key) # Public key of `owner_account`
     token_account = TOKEN_PROGRAM_ID
     mint_account = PublicKey(contract_key)
@@ -243,7 +243,7 @@ def send(api_endpoint, source_account, contract_key, sender_key, dest_key, priva
     if account_state == 0:
         associated_token_account_ix = create_associated_token_account_instruction(
             associated_token_account=associated_token_account,
-            payer=source_account.public_key(), # signer
+            payer=source_account.public_key, # signer
             wallet_address=dest_account,
             token_mint_address=mint_account,
         )
@@ -276,7 +276,7 @@ def burn(api_endpoint, contract_key, owner_key, private_key):
     token_account = TOKEN_PROGRAM_ID
     mint_account = PublicKey(contract_key)
     # List signers
-    signers = [Account(private_key)]
+    signers = [Keypair(private_key)]
     # Start transaction
     tx = Transaction()
     # Find PDA for sender

@@ -1,11 +1,11 @@
 import time
-from solana.account import Account 
+from solana.keypair import Keypair 
 from solana.rpc.api import Client
 from solana.rpc.types import TxOpts 
 
 def execute(api_endpoint, tx, signers, max_retries=3, skip_confirmation=True, max_timeout=60, target=20, finalized=True):
     client = Client(api_endpoint)
-    signers = list(map(Account, set(map(lambda s: s.secret_key(), signers))))
+    signers = list(map(Keypair, set(map(lambda s: s.seed, signers))))
     for attempt in range(max_retries):
         try:
             result = client.send_transaction(tx, *signers, opts=TxOpts(skip_preflight=True))
