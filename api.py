@@ -1,1 +1,1 @@
-from api.metaplex_api import MetaplexAPI
+from metaplex.api.metaplex_api import MetaplexAPI

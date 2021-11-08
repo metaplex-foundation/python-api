@@ -12,7 +12,7 @@ from spl.token.instructions import (
     burn as spl_burn, BurnParams,
     initialize_mint, InitializeMintParams,
 )
-from metaplex.metadata import (
+from metaplex.metaplex.metadata import (
     create_associated_token_account_instruction,
     create_master_edition_instruction,
     create_metadata_instruction_data, 

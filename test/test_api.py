@@ -6,9 +6,9 @@ import time
 import base58
 from solana.keypair import Keypair
 from solana.rpc.api import Client
-from metaplex.metadata import get_metadata
+from metaplex.metaplex.metadata import get_metadata
 from cryptography.fernet import Fernet
-from api.metaplex_api import MetaplexAPI
+from metaplex.api.metaplex_api import MetaplexAPI
 
 def await_full_confirmation(client, txn, max_timeout=60):
     if txn is None:
