@@ -198,7 +198,7 @@ https://explorer.solana.com/tx/5kd5g4mNBSjoTVYwAasWZx6iB8ijaELfBukKrNYBeDvLomK7i
 
 This is the sequential code from the previous section. These accounts will need to change if you want to do your own test.
 ```
-account = KeyPair()
+account = Keypair()
 cfg = {"PRIVATE_KEY": base58.b58encode(account.seed).decode("ascii"), "PUBLIC_KEY": str(account.public_key), "DECRYPTION_KEY": Fernet.generate_key().decode("ascii")}
 api_endpoint = "https://api.devnet.solana.com/"
 Client(api_endpoint).request_airdrop(account.public_key, int(1e10))
