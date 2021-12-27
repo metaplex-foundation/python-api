@@ -5,7 +5,7 @@ This modules allows you to create, mint, transfer and burn NFTs on the Solana bl
 ## Setup
 First, clone down the repository
 
-Create a virtual environment and install the dependencies in `requirements.txt`. Be sure to use a version of Python >= 3.6
+Create a virtual environment and install the dependencies in `requirements.txt`. Be sure to use a version of Python >= 3.7
 
 ```bash
 python3 -m virtualenv venv
