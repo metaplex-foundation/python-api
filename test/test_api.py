@@ -10,6 +10,7 @@ from metaplex.metadata import get_metadata
 from cryptography.fernet import Fernet
 from api.metaplex_api import MetaplexAPI
 
+
 def await_full_confirmation(client, txn, max_timeout=60):
     if txn is None:
         return
@@ -24,6 +25,7 @@ def await_full_confirmation(client, txn, max_timeout=60):
         if resp["result"]:
             print(f"Took {elapsed} seconds to confirm transaction {txn}")
             break
+
 
 def test(api_endpoint="https://api.devnet.solana.com/"):
     keypair = Keypair()
@@ -51,18 +53,19 @@ def test(api_endpoint="https://api.devnet.solana.com/"):
     assert deploy_response["status"] == 200
     contract = deploy_response.get("contract")
     print(get_metadata(client, contract))
-    wallet = json.loads(api.wallet())
+    wallet = json.loads(MetaplexAPI.wallet())
     address1 = wallet.get('address')
     encrypted_pk1 = api.cipher.encrypt(bytes(wallet.get('private_key')))
     topup_response = json.loads(api.topup(api_endpoint, address1))
     print(f"Topup {address1}:", topup_response)
     assert topup_response["status"] == 200
-    mint_to_response = json.loads(api.mint(api_endpoint, contract, address1, "https://arweave.net/1eH7bZS-6HZH4YOc8T_tGp2Rq25dlhclXJkoa6U55mM/"))
+    mint_to_response = json.loads(
+        api.mint(api_endpoint, contract, address1, "https://arweave.net/1eH7bZS-6HZH4YOc8T_tGp2Rq25dlhclXJkoa6U55mM/"))
     print("Mint:", mint_to_response)
     # await_confirmation(client, mint_to_response['tx'])
     assert mint_to_response["status"] == 200
     print(get_metadata(client, contract))
-    wallet2 = json.loads(api.wallet())
+    wallet2 = json.loads(wallet())
     address2 = wallet2.get('address')
     encrypted_pk2 = api.cipher.encrypt(bytes(wallet2.get('private_key')))
     print(client.request_airdrop(api.public_key, int(1e10)))
@@ -79,11 +82,12 @@ def test(api_endpoint="https://api.devnet.solana.com/"):
     assert burn_response["status"] == 200
     print("Success!")
 
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--network", default=None)
     args = ap.parse_args()
-    if args.network == None or args.network == 'devnet':
+    if args.network is None or args.network == 'devnet':
         test()
     elif args.network == 'testnet':
         test(api_endpoint="https://api.testnet.solana.com/")
