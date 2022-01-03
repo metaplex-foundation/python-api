@@ -1,11 +1,19 @@
 import time
-from solana.keypair import Keypair 
 from solana.rpc.api import Client
-from solana.rpc.types import TxOpts 
+from solana.rpc.types import TxOpts
 
-def execute(api_endpoint, tx, signers, max_retries=3, skip_confirmation=True, max_timeout=60, target=20, finalized=True):
+
+def remove_duplicated(items):
+    # removes duplicated items in an iterator while preserving order
+    seen = set()
+    return [x for x in items if not (x in seen or seen.add(x))]
+
+
+def execute(api_endpoint, tx, signers, max_retries=3, skip_confirmation=True, max_timeout=60, target=20,
+            finalized=True):
     client = Client(api_endpoint)
-    signers = list(map(Keypair, set(map(lambda s: s.seed, signers))))
+    signers = remove_duplicated(signers)
+    last_error = None
     for attempt in range(max_retries):
         try:
             result = client.send_transaction(tx, *signers, opts=TxOpts(skip_preflight=True))
@@ -16,8 +24,10 @@ def execute(api_endpoint, tx, signers, max_retries=3, skip_confirmation=True, ma
             return result
         except Exception as e:
             print(f"Failed attempt {attempt}: {e}")
+            last_error = e
             continue
-    raise e
+    raise last_error
+
 
 def await_confirmation(client, signatures, max_timeout=60, target=20, finalized=True):
     elapsed = 0

@@ -51,7 +51,7 @@ def test(api_endpoint="https://api.devnet.solana.com/"):
     assert deploy_response["status"] == 200
     contract = deploy_response.get("contract")
     print(get_metadata(client, contract))
-    wallet = json.loads(api.wallet())
+    wallet = json.loads(wallet())
     address1 = wallet.get('address')
     encrypted_pk1 = api.cipher.encrypt(bytes(wallet.get('private_key')))
     topup_response = json.loads(api.topup(api_endpoint, address1))
@@ -62,7 +62,7 @@ def test(api_endpoint="https://api.devnet.solana.com/"):
     # await_confirmation(client, mint_to_response['tx'])
     assert mint_to_response["status"] == 200
     print(get_metadata(client, contract))
-    wallet2 = json.loads(api.wallet())
+    wallet2 = json.loads(wallet())
     address2 = wallet2.get('address')
     encrypted_pk2 = api.cipher.encrypt(bytes(wallet2.get('private_key')))
     print(client.request_airdrop(api.public_key, int(1e10)))
