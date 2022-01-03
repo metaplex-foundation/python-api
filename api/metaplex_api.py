@@ -7,19 +7,6 @@ from metaplex.transactions import deploy, topup, mint, send, burn, update_token_
 from utils.execution_engine import execute
 
 
-def wallet():
-    """ Generate a wallet and return the address and private key. """
-    keypair = Keypair()
-    pub_key = keypair.public_key
-    private_key = list(keypair.seed)
-    return json.dumps(
-        {
-            'address': str(pub_key),
-            'private_key': private_key
-        }
-    )
-
-
 class MetaplexAPI:
 
     def __init__(self, cfg):
@@ -27,6 +14,19 @@ class MetaplexAPI:
         self.public_key = cfg["PUBLIC_KEY"]
         self.keypair = Keypair(PrivateKey(bytes(self.private_key)))
         self.cipher = Fernet(cfg["DECRYPTION_KEY"])
+
+    @staticmethod
+    def wallet():
+        """ Generate a wallet and return the address and private key. """
+        keypair = Keypair()
+        pub_key = keypair.public_key
+        private_key = list(keypair.seed)
+        return json.dumps(
+            {
+                'address': str(pub_key),
+                'private_key': private_key
+            }
+        )
 
     def deploy(self, api_endpoint, name, symbol, fees, max_retries=3, skip_confirmation=False, max_timeout=60,
                target=20, finalized=True):
