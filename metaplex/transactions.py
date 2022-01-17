@@ -36,8 +36,8 @@ def deploy(api_endpoint, source_account, name, symbol, fees):
     # Start transaction
     tx = Transaction()
     # Get the minimum rent balance for a mint account
-    min_rent_reseponse = client.get_minimum_balance_for_rent_exemption(MINT_LAYOUT.sizeof()) # type: ignore
-    lamports = min_rent_reseponse["result"]
+    min_rent_response = client.get_minimum_balance_for_rent_exemption(MINT_LAYOUT.sizeof()) # type: ignore
+    lamports = min_rent_response["result"]
     # Generate Mint 
     create_mint_account_ix = create_account(
         CreateAccountParams(
@@ -98,8 +98,8 @@ def topup(api_endpoint, sender_account, to, amount=None):
     tx = Transaction()
     # Determine the amount to send 
     if amount is None:
-        min_rent_reseponse = client.get_minimum_balance_for_rent_exemption(ACCOUNT_LAYOUT.sizeof())
-        lamports = min_rent_reseponse["result"]
+        min_rent_response = client.get_minimum_balance_for_rent_exemption(ACCOUNT_LAYOUT.sizeof())
+        lamports = min_rent_response["result"]
     else:
         lamports = int(amount)
     # Generate transaction
