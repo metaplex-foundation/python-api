@@ -13,9 +13,12 @@ MAX_SYMBOL_LENGTH = 10
 MAX_URI_LENGTH = 200
 MAX_CREATOR_LENGTH = 34
 MAX_CREATOR_LIMIT = 5
+
 class InstructionType(IntEnum):
     CREATE_METADATA = 0
     UPDATE_METADATA = 1
+    PRIMARY_SALE_HAPPENED = 4
+    SIGN_METADATA = 7
 
 METADATA_PROGRAM_ID = PublicKey('metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s')
 SYSTEM_PROGRAM_ID = PublicKey('11111111111111111111111111111111')
@@ -108,7 +111,6 @@ def create_metadata_instruction_data(name, symbol, fee, creators):
 
 def create_metadata_instruction(data, update_authority, mint_key, mint_authority_key, payer):
     metadata_account = get_metadata_account(mint_key)
-    print(metadata_account)
     keys = [
         AccountMeta(pubkey=metadata_account, is_signer=False, is_writable=True),
         AccountMeta(pubkey=mint_key, is_signer=False, is_writable=False),
@@ -203,6 +205,40 @@ def update_metadata_instruction(data, update_authority, mint_key):
         AccountMeta(pubkey=update_authority, is_signer=True, is_writable=False),
     ]
     return TransactionInstruction(keys=keys, program_id=METADATA_PROGRAM_ID, data=data)
+
+def update_primary_sale_happened_instruction(update_authority, mint_key, token):
+    data_struct =  cStruct(
+        "instruction_type" / Int8ul
+    )
+    data = data_struct.build(
+                dict(
+                    instruction_type=InstructionType.PRIMARY_SALE_HAPPENED
+                )
+            )
+    metadata_account = get_metadata_account(mint_key)
+    keys = [
+        AccountMeta(pubkey=metadata_account, is_signer=False, is_writable=True),
+        AccountMeta(pubkey=update_authority, is_signer=True, is_writable=False),
+        AccountMeta(pubkey=token, is_signer=False, is_writable=False),
+    ]
+    return TransactionInstruction(keys=keys, program_id=METADATA_PROGRAM_ID, data=data)
+
+def creators_sign_metadata_instruction(mint_key, creator):
+    data_struct =  cStruct(
+        "instruction_type" / Int8ul
+    )
+    data = data_struct.build(
+                dict(
+                    instruction_type=InstructionType.SIGN_METADATA
+                )
+            )
+    metadata_account = get_metadata_account(mint_key)
+    keys = [
+        AccountMeta(pubkey=metadata_account, is_signer=False, is_writable=True),
+        AccountMeta(pubkey=creator, is_signer=True, is_writable=False),
+    ]
+    return TransactionInstruction(keys=keys, program_id=METADATA_PROGRAM_ID, data=data)
+
 
 def create_master_edition_instruction(
     mint: PublicKey,

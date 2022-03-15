@@ -22,6 +22,8 @@ from metaplex.metadata import (
     update_metadata_instruction,
     ASSOCIATED_TOKEN_ACCOUNT_PROGRAM_ID,
     TOKEN_PROGRAM_ID,
+    update_primary_sale_happened_instruction,
+    creators_sign_metadata_instruction,
 )
 
 
@@ -262,6 +264,58 @@ def send(api_endpoint, source_account, contract_key, sender_key, dest_key, priva
     tx = tx.add(spl_transfer_ix)
     return tx, signers
 
+
+def creators_sign(api_endpoint, contract_key, creator_private_key):
+    """
+    Sign the token by unverified creators
+    Requires to be run by they keypair of the creator that are unverified
+    Return a status flag of success or fail and the native transaction data. 
+    """
+    # Initialize Client
+    client = Client(api_endpoint)
+    # List signers
+    creator_wallet_key = Keypair(creator_private_key)
+    signers = [creator_wallet_key]
+    # List accounts
+    creator_account = PublicKey(creator_wallet_key.public_address)
+    mint_account = PublicKey(contract_key)
+    # Start transaction
+    tx = Transaction()
+    # Create instruction and add
+    creators_sign_metadata_ix = creators_sign_metadata_instruction(
+      mint_key=mint_pubkey,
+      creator=creator_pubkey
+    )
+    txn = txn.add(creators_sign_metadata_ix)
+    
+    return tx, signers
+
+def update_primary_sale_happened(api_endpoint, contract_key, owner_private_key):
+    """
+    Updates primary sale happened
+    Return a status flag of success or fail and the native transaction data. 
+    """
+    # Initialize Client
+    client = Client(api_endpoint)
+    # List signers
+    owner_wallet_key = Keypair(owner_private_key)
+    signers = [owner_wallet_key]
+    # List accounts
+    owner_account = PublicKey(owner_private_key.public_address)
+    mint_account = PublicKey(contract_key)
+    
+    # Create instruction and add
+    associated_token_account = get_associated_token_address(owner_account, mint_account)
+
+    update_primary_sale_happened_ix = update_primary_sale_happened_instruction(
+        update_authority=owner_account,
+        mint_key=mint_account,
+        token=associated_token_account
+    )
+    
+    tx = tx.add(update_primary_sale_happened_ix)
+    
+    return tx, signers
 
 def burn(api_endpoint, contract_key, owner_key, private_key):
     """

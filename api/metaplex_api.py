@@ -2,7 +2,16 @@ import json
 from cryptography.fernet import Fernet
 import base58
 from solana.keypair import Keypair 
-from metaplex.transactions import deploy, topup, mint, send, burn, update_token_metadata
+from metaplex.transactions import (
+    deploy, 
+    topup, 
+    mint, 
+    send, 
+    burn, 
+    update_token_metadata, 
+    creators_sign,
+    update_primary_sale_happened
+)
 from utils.execution_engine import execute
 
 class MetaplexAPI():
@@ -132,7 +141,55 @@ class MetaplexAPI():
             return json.dumps(resp)
         except:
             return json.dumps({"status": 400})
-
+    
+    def creators_sign(self, api_endpoint, contract_key, encrypted_private_key, max_retries=3, skip_confirmation=False, max_timeout=60, target=20, finalized=True):
+        """
+        Unverified creators to sign minted tokens. requires the unverfied creators private keys.
+        May require a private key, if so this will be provided encrypted using Fernet: https://cryptography.io/en/latest/fernet/
+        Return a status flag of success or fail and the native transaction data.
+        """
+        try:
+            private_key = list(self.cipher.decrypt(encrypted_private_key))
+            tx, signers = creators_sign(api_endpoint, contract_key, private_key)
+            resp = execute(
+                api_endpoint,
+                tx,
+                signers,
+                max_retries=max_retries,
+                skip_confirmation=skip_confirmation,
+                max_timeout=max_timeout,
+                target=target,
+                finalized=finalized,
+            )
+            resp["status"] = 200
+            return json.dumps(resp)
+        except:
+            return json.dumps({"status": 400})
+        
+    def update_primary_sale_happened(self, api_endpoint, contract_key, encrypted_private_key, max_retries=3, skip_confirmation=False, max_timeout=60, target=20, finalized=True):
+        """
+        Updates primary sale happend to secondary sale. requires the owner's private keys
+        May require a private key, if so this will be provided encrypted using Fernet: https://cryptography.io/en/latest/fernet/
+        Return a status flag of success or fail and the native transaction data.
+        """
+        try:
+            private_key = list(self.cipher.decrypt(encrypted_private_key))
+            tx, signers = update_primary_sale_happened(api_endpoint, contract_key, private_key)
+            resp = execute(
+                api_endpoint,
+                tx,
+                signers,
+                max_retries=max_retries,
+                skip_confirmation=skip_confirmation,
+                max_timeout=max_timeout,
+                target=target,
+                finalized=finalized,
+            )
+            resp["status"] = 200
+            return json.dumps(resp)
+        except:
+            return json.dumps({"status": 400})
+    
     def burn(self, api_endpoint, contract_key, owner_key, encrypted_private_key, max_retries=3, skip_confirmation=False, max_timeout=60, target=20, finalized=True):
         """
         Burn a token, permanently removing it from the blockchain.
