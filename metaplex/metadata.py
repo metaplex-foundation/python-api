@@ -206,7 +206,6 @@ def update_metadata_instruction(data, update_authority, mint_key):
     ]
     return TransactionInstruction(keys=keys, program_id=METADATA_PROGRAM_ID, data=data)
 
-
 def update_primary_sale_happened_instruction(update_authority, mint_key, token):
     data_struct =  cStruct(
         "instruction_type" / Int8ul
