@@ -4,11 +4,10 @@ from solana.rpc.api import Client
 from solana.rpc.types import TxOpts 
 
 def execute(api_endpoint, tx, signers, max_retries=3, skip_confirmation=True, max_timeout=60, target=20, finalized=True):
-    client = Client(api_endpoint)
-    signers = list(map(Keypair, set(map(lambda s: s.seed, signers))))
+    client = Client(api_endpoint)    
     for attempt in range(max_retries):
         try:
-            result = client.send_transaction(tx, *signers, opts=TxOpts(skip_preflight=True))
+            result = client.send_transaction(tx, *signers, opts=TxOpts(skip_preflight=False))
             print(result)
             signatures = [x.signature for x in tx.signatures]
             if not skip_confirmation:
